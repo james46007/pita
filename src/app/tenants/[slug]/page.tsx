@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation"
+import { headers } from "next/headers"
 import Link from "next/link"
 import { prisma } from "@/lib/prisma"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
@@ -12,6 +13,10 @@ export default async function TenantLandingPage({
   params: Promise<{ slug: string }>
 }) {
   const { slug } = await params
+  const headersList = await headers()
+  const host = headersList.get("host") || ""
+  const isSubdomain = host.startsWith(`${slug}.`)
+  const basePath = isSubdomain ? "" : `/tenants/${slug}`
 
   const complex = await prisma.complex.findUnique({
     where: { slug },
@@ -117,7 +122,7 @@ export default async function TenantLandingPage({
                   </CardContent>
                 </div>
                 <CardFooter className="pt-2">
-                  <Link href={`/reservar/${court.id}`} className="w-full">
+                  <Link href={`${basePath}/reservar/${court.id}`} className="w-full">
                     <Button className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-medium">
                       <Calendar className="mr-2 h-4 w-4" /> Book Court
                     </Button>

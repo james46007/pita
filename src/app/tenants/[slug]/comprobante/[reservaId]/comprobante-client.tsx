@@ -17,6 +17,7 @@ interface CuentaBancariaInfo {
 }
 
 export default function ComprobanteClient({
+  basePath = "",
   reservaId,
   montoTotal,
   canchaNombre,
@@ -26,6 +27,7 @@ export default function ComprobanteClient({
   estadoActual,
   cuentas,
 }: {
+  basePath?: string
   reservaId: string
   montoTotal: number
   canchaNombre: string
@@ -192,7 +194,7 @@ export default function ComprobanteClient({
           </CardContent>
 
           <CardFooter className="flex justify-center border-t pt-4">
-            <Button variant="ghost" size="sm" onClick={() => router.push("/")}>
+            <Button variant="ghost" size="sm" onClick={() => router.push(basePath || "/")}>
               Return to Homepage
             </Button>
           </CardFooter>

@@ -8,13 +8,18 @@ export async function middleware(req: NextRequest) {
 
   // Determine if request originates from a multi-tenant subdomain
   // Examples: "valle.myapp.com" or "valle.localhost:3000"
-  const currentHost =
-    process.env.NODE_ENV === "production"
-      ? hostname.replace(`.${process.env.NEXT_PUBLIC_ROOT_DOMAIN}`, "")
-      : hostname.replace(`.localhost:3000`, "")
+  let currentHost = ""
+  if (hostname.includes(".localhost")) {
+    currentHost = hostname.split(".localhost")[0]
+  } else if (
+    process.env.NEXT_PUBLIC_ROOT_DOMAIN &&
+    hostname.endsWith(`.${process.env.NEXT_PUBLIC_ROOT_DOMAIN}`)
+  ) {
+    currentHost = hostname.replace(`.${process.env.NEXT_PUBLIC_ROOT_DOMAIN}`, "")
+  }
 
   const isSubdomain =
-    currentHost &&
+    Boolean(currentHost) &&
     currentHost !== hostname &&
     !currentHost.includes("localhost") &&
     currentHost !== "www"
@@ -26,7 +31,8 @@ export async function middleware(req: NextRequest) {
     if (
       !url.pathname.startsWith("/api") &&
       !url.pathname.startsWith("/_next") &&
-      !url.pathname.includes(".")
+      !url.pathname.includes(".") &&
+      !url.pathname.startsWith(`/tenants/${slug}`)
     ) {
       return NextResponse.rewrite(new URL(`/tenants/${slug}${url.pathname}`, req.url))
     }

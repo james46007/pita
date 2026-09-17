@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation"
+import { headers } from "next/headers"
 import { prisma } from "@/lib/prisma"
 import ComprobanteClient from "./comprobante-client"
 
@@ -8,6 +9,10 @@ export default async function ComprobantePage({
   params: Promise<{ slug: string; reservaId: string }>
 }) {
   const { slug, reservaId } = await params
+  const headersList = await headers()
+  const host = headersList.get("host") || ""
+  const isSubdomain = host.startsWith(`${slug}.`)
+  const basePath = isSubdomain ? "" : `/tenants/${slug}`
 
   const complex = await prisma.complex.findUnique({
     where: { slug },
@@ -32,6 +37,7 @@ export default async function ComprobantePage({
 
   return (
     <ComprobanteClient
+      basePath={basePath}
       reservaId={booking.id}
       montoTotal={Number(booking.totalAmount)}
       canchaNombre={booking.court.name}

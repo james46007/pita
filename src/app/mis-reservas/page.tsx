@@ -4,6 +4,7 @@ import { useState, useEffect } from "react"
 import Link from "next/link"
 import { Calendar, Clock, MapPin, CheckCircle, XCircle, FileText, Trophy } from "lucide-react"
 import { toast } from "sonner"
+import { getTenantUrl } from "@/lib/tenant-url"
 
 interface CustomerBooking {
   id: string
@@ -211,7 +212,7 @@ export default function MisReservasPage() {
 
                     {(status === "PAYMENT_PENDING" || status === "PENDIENTE_PAGO") && (
                       <a
-                        href={`http://${slug}.localhost:3000/comprobante/${r.id}`}
+                        href={getTenantUrl(slug, `/comprobante/${r.id}`)}
                         target="_blank"
                         rel="noreferrer"
                         className="inline-flex items-center gap-1.5 text-xs font-bold text-emerald-600 hover:text-emerald-700 underline mt-1"

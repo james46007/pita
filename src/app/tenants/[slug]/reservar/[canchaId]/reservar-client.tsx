@@ -22,11 +22,13 @@ interface SlotItem {
 }
 
 export default function ReservarCanchaClient({
+  basePath = "",
   canchaId,
   canchaNombre,
   precioHora,
   duracionMin,
 }: {
+  basePath?: string
   canchaId: string
   canchaNombre: string
   precioHora: number
@@ -96,7 +98,7 @@ export default function ReservarCanchaClient({
       }
 
       // Redirect to upload receipt page
-      router.push(`/comprobante/${data.reserva.id}`)
+      router.push(`${basePath}/comprobante/${data.reserva.id}`)
     } catch {
       setError("Unexpected error while creating reservation")
       setSubmitting(false)
@@ -108,7 +110,7 @@ export default function ReservarCanchaClient({
   return (
     <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950 px-4 py-8">
       <div className="mx-auto max-w-4xl space-y-6">
-        <Button variant="ghost" size="sm" onClick={() => router.back()} className="mb-2">
+        <Button variant="ghost" size="sm" onClick={() => router.push(basePath || "/")} className="mb-2">
           <ArrowLeft className="mr-2 h-4 w-4" /> Back to courts
         </Button>
 

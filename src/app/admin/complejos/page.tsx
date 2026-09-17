@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react"
 import { Building2, Plus, Globe, CheckCircle, XCircle, ExternalLink } from "lucide-react"
 import { toast } from "sonner"
+import { getTenantUrl } from "@/lib/tenant-url"
 
 interface ComplexItem {
   id: string
@@ -165,7 +166,7 @@ export default function ComplejosAdminPage() {
                       </td>
                       <td className="px-6 py-4">
                         <a
-                          href={`http://${c.slug}.localhost:3000`}
+                          href={getTenantUrl(c.slug)}
                           target="_blank"
                           rel="noreferrer"
                           className="inline-flex items-center gap-1 font-mono text-xs font-semibold text-purple-600 hover:underline"
@@ -277,7 +278,7 @@ export default function ComplejosAdminPage() {
                   className="w-full px-3 py-2 border rounded-lg bg-zinc-50 dark:bg-zinc-800 dark:border-zinc-700 font-mono text-zinc-900 dark:text-zinc-100"
                 />
                 <p className="text-[11px] text-zinc-400 mt-1">
-                  Public URL: {slug ? `${slug}.localhost:3000` : "..."}
+                  Public URL: {slug ? getTenantUrl(slug) : "..."}
                 </p>
               </div>
 
