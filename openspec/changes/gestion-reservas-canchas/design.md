@@ -213,7 +213,7 @@ src/
 
   lib/
     prisma.ts                 -- PrismaClient singleton
-    supabase.ts               -- Supabase client (Storage for payment receipts)
+    supabase.ts               -- Supabase client (Storage for payment-receipts)
     auth.ts                   -- NextAuth config (admins/staff)
     auth-cliente.ts           -- NextAuth config (players)
     generate-slots.ts         -- Slot generation utility
@@ -228,7 +228,7 @@ src/
 
 ### D6: Receipt Storage — Supabase Storage
 
-**Decision**: Use a dedicated Supabase Storage bucket (`comprobantes-pago`). The client uploads the receipt image and the public/signed URL is stored in `Reserva.comprobanteUrl`.
+**Decision**: Use a dedicated Supabase Storage bucket (`payment-receipts`). The client uploads the receipt image and the public/signed URL is stored in `Reserva.comprobanteUrl`.
 
 **Rationale**: Keeps all backend assets centralized inside Supabase (PostgreSQL + Storage) without third-party dependencies.
 

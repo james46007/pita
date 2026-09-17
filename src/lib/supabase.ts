@@ -5,4 +5,5 @@ const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.
 
 export const supabase = createClient(supabaseUrl, supabaseServiceKey)
 
-export const BUCKET_COMPROBANTES = "comprobantes-pago"
+export const BUCKET_PAYMENT_RECEIPTS = "payment-receipts"
+export const BUCKET_COMPROBANTES = BUCKET_PAYMENT_RECEIPTS

@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server"
-import { supabase, BUCKET_COMPROBANTES } from "@/lib/supabase"
+import { supabase, BUCKET_PAYMENT_RECEIPTS } from "@/lib/supabase"
 import { prisma } from "@/lib/prisma"
 
 // POST /api/reservas/[id]/comprobante
@@ -20,6 +20,28 @@ export async function POST(
 
     if (booking.status === "CANCELLED") {
       return NextResponse.json({ error: "Reservation was previously cancelled" }, { status: 400 })
+    }
+
+    // Check if reservation has expired due to payment timeout
+    if (booking.status === "PAYMENT_PENDING" && booking.expiresAt && new Date() > booking.expiresAt) {
+      await prisma.$transaction(async (tx) => {
+        await tx.booking.update({
+          where: { id: booking.id },
+          data: {
+            status: "CANCELLED",
+            notes: "Expired automatically: payment receipt timeout exceeded",
+          },
+        })
+        await tx.slot.update({
+          where: { id: booking.slotId },
+          data: { status: "AVAILABLE" },
+        })
+      })
+
+      return NextResponse.json(
+        { error: "The payment time limit has expired and the court slot has been released." },
+        { status: 410 }
+      )
     }
 
     const formData = await req.formData()
@@ -45,13 +67,13 @@ export async function POST(
 
     // Upload to Supabase Storage
     const fileExt = file.name.split(".").pop()
-    const filePath = `reserva-${booking.id}-${Date.now()}.${fileExt}`
+    const filePath = `payment-receipt-${booking.id}-${Date.now()}.${fileExt}`
 
     const arrayBuffer = await file.arrayBuffer()
     const buffer = Buffer.from(arrayBuffer)
 
     const { error: uploadError } = await supabase.storage
-      .from(BUCKET_COMPROBANTES)
+      .from(BUCKET_PAYMENT_RECEIPTS)
       .upload(filePath, buffer, {
         contentType: file.type,
         upsert: true,
@@ -59,24 +81,18 @@ export async function POST(
 
     if (uploadError) {
       console.error("Error uploading receipt to Supabase:", uploadError)
-      // Fallback URL for local development environments
-      const fallbackUrl = `https://storage.supabase.local/${filePath}`
-      const updated = await prisma.booking.update({
-        where: { id },
-        data: {
-          receiptUrl: fallbackUrl,
-          status: "RECEIPT_UPLOADED",
+
+      return NextResponse.json(
+        {
+          error: "Failed to upload receipt",
+          details: uploadError.message,
         },
-      })
-      return NextResponse.json({
-        message: "Receipt registered (development mode)",
-        booking: updated,
-        reserva: updated,
-      })
+        { status: 500 }
+      )
     }
 
     const { data: publicUrlData } = supabase.storage
-      .from(BUCKET_COMPROBANTES)
+      .from(BUCKET_PAYMENT_RECEIPTS)
       .getPublicUrl(filePath)
 
     const updatedBooking = await prisma.booking.update({

@@ -45,6 +45,7 @@ export default async function ComprobantePage({
       horaInicio={booking.slot.startTime}
       horaFin={booking.slot.endTime}
       estadoActual={booking.status}
+      expiresAt={booking.expiresAt ? booking.expiresAt.toISOString() : null}
       cuentas={complex.bankAccounts.map((c) => ({
         id: c.id,
         banco: c.bankName,

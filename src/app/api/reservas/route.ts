@@ -4,6 +4,7 @@ import { z } from "zod"
 import { authOptionsCliente } from "@/lib/auth-cliente"
 import { getCurrentUserAndTenant } from "@/lib/tenant"
 import { prisma } from "@/lib/prisma"
+import { cleanupExpiredBookings } from "@/lib/booking-expiration"
 
 const createBookingSchema = z.object({
   slotId: z.string().min(1, "slotId is required"),
@@ -73,7 +74,10 @@ export async function POST(req: Request) {
         data: { status: "BOOKED" },
       })
 
-      // 3. Create booking
+      // 3. Calculate expiration deadline based on complex configuration (default 15 minutes)
+      const timeoutMin = slot.court.complex.paymentTimeoutMin || 15
+      const expiresAt = new Date(Date.now() + timeoutMin * 60 * 1000)
+
       const totalAmount = Number(slot.court.pricePerHour) * (slot.court.slotDurationMin / 60)
 
       const booking = await tx.booking.create({
@@ -88,6 +92,7 @@ export async function POST(req: Request) {
           totalAmount,
           notes,
           status: "PAYMENT_PENDING",
+          expiresAt,
         },
         include: {
           court: { select: { name: true, type: true } },
@@ -143,6 +148,9 @@ export async function GET(req: Request) {
     const dateStr = searchParams.get("date") || searchParams.get("fecha") || undefined
 
     const { complexId } = await getCurrentUserAndTenant(targetComplexId)
+
+    // Automatically release any bookings that have exceeded their payment timeout
+    await cleanupExpiredBookings(undefined, complexId)
 
     const where: any = { complexId }
 

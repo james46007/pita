@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
+import { cleanupExpiredBookings } from "@/lib/booking-expiration"
 
 // GET /api/slots?courtId=...&date=YYYY-MM-DD (Public)
 export async function GET(req: Request) {
@@ -14,6 +15,9 @@ export async function GET(req: Request) {
         { status: 400 }
       )
     }
+
+    // Automatically free up any expired unpaid bookings for this court
+    await cleanupExpiredBookings(courtId)
 
     const targetDate = new Date(`${dateStr}T00:00:00Z`)
 

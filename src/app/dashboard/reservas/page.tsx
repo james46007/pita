@@ -167,7 +167,7 @@ export default function BookingsPage() {
             Booking Management
           </h1>
           <p className="text-sm text-zinc-500">
-            View, filter, and audit payment receipts for customer reservations.
+            View, filter, and audit payment-receipts for customer reservations.
           </p>
         </div>
       </div>

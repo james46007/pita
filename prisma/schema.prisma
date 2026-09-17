@@ -45,9 +45,10 @@ model Complex {
   address   String
   slug      String   @unique
   logoUrl   String?
-  isActive  Boolean  @default(true)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  isActive          Boolean  @default(true)
+  paymentTimeoutMin Int      @default(15) // Minutes allowed to upload payment receipt before slot is released
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
 
   courts       Court[]
   bankAccounts BankAccount[]
@@ -125,6 +126,7 @@ model Booking {
   receiptUrl    String?
   totalAmount   Decimal       @db.Decimal(10, 2)
   notes         String?
+  expiresAt     DateTime?     // Expiration deadline for payment receipt upload
   createdAt     DateTime      @default(now())
   updatedAt     DateTime      @updatedAt
 

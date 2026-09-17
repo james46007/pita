@@ -5,7 +5,7 @@
 - [x] 1.3 Initialize Prisma with PostgreSQL: `pnpm dlx prisma init --datasource-provider postgresql`; verify `prisma/schema.prisma` and `.env` exist
 - [x] 1.4 Configure `DATABASE_URL`, `NEXT_PUBLIC_SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` in `.env`; verify connection with `pnpm dlx prisma db pull`
 - [x] 1.5 Initialize shadcn/ui: `pnpm dlx shadcn@latest init -d`; install base components `button`, `input`, `card`, `badge`, `table`, `dialog`, `select`, `form`, `sonner`; verify they appear in `src/components/ui/`
-- [x] 1.6 Configure Supabase Storage client in `src/lib/supabase.ts` and set up `comprobantes-pago` bucket; verify connection succeeds
+- [x] 1.6 Configure Supabase Storage client in `src/lib/supabase.ts` and set up `payment-receipts` bucket; verify connection succeeds
 
 ## 2. Database Schema (Prisma)
 
