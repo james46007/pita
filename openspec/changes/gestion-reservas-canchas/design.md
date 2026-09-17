@@ -1,68 +1,56 @@
 ## Context
 
-Proyecto nuevo sin código existente. Ver `proposal.md` para motivación. El stack elegido es Next.js 14 App Router + TypeScript + Tailwind CSS + shadcn/ui + Prisma ORM + PostgreSQL en Supabase. El sistema es multi-tenant SaaS con aislamiento row-level.
+New project without legacy code. See `proposal.md` for background and rationale. The chosen stack is Next.js 14 App Router + TypeScript + Tailwind CSS + shadcn/ui + Prisma ORM + PostgreSQL on Supabase. The system is a multi-tenant SaaS with row-level data isolation.
 
 ## Goals / Non-Goals
 
 **Goals:**
-- Definir la arquitectura de carpetas de Next.js App Router
-- Diseñar el schema Prisma completo con todas las entidades y relaciones
-- Establecer la estrategia de autenticación dual (admins vs. clientes)
-- Garantizar anti-overbooking a nivel de base de datos
-- Definir el patrón de aislamiento multi-tenant
+- Define Next.js App Router folder architecture
+- Design comprehensive Prisma schema with all models and relationships
+- Establish dual authentication strategy (admins vs. customers)
+- Guarantee anti-overbooking at database level
+- Define multi-tenant isolation pattern
 
 **Non-Goals:**
-- Integración de pagos online automáticos (Paymentez, PayPhone) — MVP usa comprobante manual
-- Notificaciones por email/SMS — fuera del MVP
-- Aplicación móvil nativa
-- Reportes y analytics avanzados
+- Direct automated payment gateways (Paymentez, Stripe, etc.) — MVP uses manual transfer receipt confirmation
+- Email/SMS notifications — outside MVP scope
+- Native mobile application
+- Advanced reporting and analytics
 
 ## Decisions
 
-### D1: Aislamiento multi-tenant — Row-level isolation
+### D1: Multi-tenant Isolation — Subdomains + Row-level Isolation
 
-**Decisión**: Todos los tenants comparten la misma base de datos y esquema PostgreSQL. El aislamiento se logra filtrando siempre por `complejoId` en cada query.
+**Decision**: 
+- Routing via subdomains (`[slug].domain.com` or `[slug].localhost:3000`).
+- `middleware.ts` intercepts the host header, extracts the complex subdomain/slug, and internally rewrites the request to `/_tenants/[slug]/...` while keeping the browser URL clean.
+- All tenants share the same PostgreSQL database on Supabase with strict filtering by `complejoId` on every query.
 
-**Rationale**: Para un MVP en Supabase es la opción más simple y económica. Schema-per-tenant requeriría múltiples conexiones Prisma o migraciones por tenant.
-
-**Refuerzo adicional**: Row Level Security (RLS) de Supabase como segunda capa de seguridad.
-
-**Alternativas descartadas**:
-- Schema-per-tenant: más aislamiento pero incompatible con el cliente Prisma estándar sin trabajo adicional significativo.
-- DB-per-tenant: costo y complejidad operativa inasumibles en MVP.
+**Rationale**: Delivers a professional, white-label SaaS experience for each sports complex.
 
 ---
 
-### D2: Anti-overbooking — Constraint único + relación 1:1 Slot↔Reserva
+### D2: Anti-overbooking — Unique Constraint + 1:1 Slot↔Booking Relationship
 
-**Decisión**: La tabla `Slot` tiene un índice único `@@unique([canchaId, fecha, horaInicio])`. La tabla `Reserva` tiene un campo `slotId` con `@unique`, haciendo la relación 1:1. Cambiar el slot a RESERVADO y crear la Reserva ocurre en una sola transacción Prisma.
+**Decision**: The `Slot` model enforces a unique compound index `@@unique([canchaId, fecha, horaInicio])`. The `Reserva` model holds a `@unique` foreign key on `slotId`, establishing a strict 1:1 relation. Updating slot to `RESERVADO` and creating `Reserva` occurs within an atomic Prisma transaction.
 
-**Rationale**: Garantía a nivel de base de datos, no solo a nivel de aplicación. Incluso bajo carga concurrente, la base de datos rechaza la segunda inserción.
-
-**Alternativas descartadas**:
-- Check en aplicación (SELECT luego INSERT): propenso a race conditions bajo concurrencia.
-- Pessimistic locking: más complejo y penaliza performance.
+**Rationale**: Enforced at database level rather than just application memory. Even under concurrent requests, PostgreSQL rejects duplicate inserts.
 
 ---
 
-### D3: Autenticación dual — NextAuth con dos providers separados
+### D3: Dual Authentication — NextAuth with Two Distinct Providers
 
-**Decisión**: Una única instalación de NextAuth con dos rutas de sesión:
-- `/api/auth/[...nextauth]` para administradores/staff (tabla `Usuario`)
-- `/api/auth/cliente/[...nextauth]` para jugadores (tabla `Cliente`)
+**Decision**: A single NextAuth configuration structure running two separate session endpoints:
+- `/api/auth/[...nextauth]` for administrators and staff (`Usuario` table)
+- `/api/auth/cliente/[...nextauth]` for players (`Cliente` table)
 
-Cada una usa `CredentialsProvider` con su propia tabla.
-
-**Rationale**: Mantiene las sesiones completamente separadas. Un cliente no puede acceder accidentalmente al dashboard aunque manipule cookies.
-
-**Alternativas descartadas**:
-- Una sola tabla de usuarios con campo `rol`: mayor riesgo de que un cliente obtenga acceso a rutas de admin por un bug de autorización.
+Each session uses independent cookies (`auth-admin.session-token` and `auth-cliente.session-token`).
 
 ---
 
-### D4: Schema Prisma — 9 entidades
+### D4: Prisma Schema — 9 Models
 
-```
+```prisma
 ComplejoDeportivo
   id            String   @id @default(cuid())
   nombre        String
@@ -101,7 +89,7 @@ Cancha
 HorarioDisponible
   id            String   @id @default(cuid())
   canchaId      String
-  diaSemana     Int      (0=Dom … 6=Sab)
+  diaSemana     Int      (0=Sun … 6=Sat)
   horaApertura  String   ("06:00")
   horaCierre    String   ("22:00")
   activo        Boolean  @default(true)
@@ -169,30 +157,31 @@ UsuarioComplejo
 
 ---
 
-### D5: Arquitectura de carpetas Next.js App Router
+### D5: Next.js App Router Folder Architecture (Subdomain Rewrites)
 
 ```
 src/
   app/
-    (public)/
-      [slug]/
-        page.tsx              -- landing pública del complejo
+    _tenants/
+      [slug]/                 -- Public tenant views via subdomain
+        page.tsx              -- Complex landing page
         reservar/
           [canchaId]/
-            page.tsx          -- selección de slot + formulario reserva
+            page.tsx          -- Slot selection and reservation
+            comprobante/
+              [reservaId]/
+                page.tsx      -- Payment receipt upload
         mis-reservas/
-          page.tsx            -- historial cliente autenticado
-      layout.tsx
+          page.tsx            -- Player reservation history
 
     dashboard/
-      layout.tsx              -- sidebar + auth guard (ADMIN/STAFF)
-      page.tsx                -- agenda del día
+      layout.tsx              -- Sidebar + RBAC auth guard (ADMIN/STAFF)
+      page.tsx                -- Day schedule overview
       reservas/
         page.tsx
         [id]/page.tsx
       canchas/
         page.tsx
-        [id]/page.tsx
       horarios/
         page.tsx
       slots/
@@ -201,10 +190,9 @@ src/
         page.tsx              -- ADMIN only
 
     admin/
-      layout.tsx              -- auth guard SUPER_ADMIN
+      layout.tsx              -- SUPER_ADMIN auth guard
       complejos/
         page.tsx
-        [id]/page.tsx
       usuarios/
         page.tsx
 
@@ -212,63 +200,49 @@ src/
       auth/[...nextauth]/route.ts
       auth/cliente/[...nextauth]/route.ts
       reservas/
-        route.ts              -- GET (filtros), POST (crear)
+        route.ts
         [id]/
-          route.ts            -- GET, PATCH, DELETE
+          route.ts
           comprobante/route.ts
       slots/
-        route.ts              -- GET público (disponibilidad)
-        generate/route.ts     -- POST admin (generar por rango)
+        route.ts
+        generate/route.ts
       dashboard/
-        reservas/route.ts     -- PATCH (confirmar/cancelar)
-        slots/route.ts        -- POST, PATCH (admin)
-      admin/
-        complejos/route.ts
-        usuarios/route.ts
+        reservas/route.ts
+        slots/route.ts
 
   lib/
-    prisma.ts                 -- singleton PrismaClient
-    auth.ts                   -- NextAuth config (admins)
-    auth-cliente.ts           -- NextAuth config (clientes)
-    generate-slots.ts         -- lógica de generación de slots
-    tenant.ts                 -- helper: extraer complejoId del tenant actual
+    prisma.ts                 -- PrismaClient singleton
+    supabase.ts               -- Supabase client (Storage for payment receipts)
+    auth.ts                   -- NextAuth config (admins/staff)
+    auth-cliente.ts           -- NextAuth config (players)
+    generate-slots.ts         -- Slot generation utility
+    tenant.ts                 -- Tenant isolation & authorization helpers
 
-  middleware.ts               -- protección de rutas por rol
+  middleware.ts               -- Subdomain rewrites & RBAC protection
   components/
-    ui/                       -- shadcn/ui
-    dashboard/
-    public/
-  types/
-    index.ts
+    ui/                       -- shadcn/ui components
 ```
 
 ---
 
-### D6: Subida de comprobantes — UploadThing
+### D6: Receipt Storage — Supabase Storage
 
-**Decisión**: Usar UploadThing para la subida de imágenes de comprobantes. Integra directamente con Next.js App Router, sin necesidad de configurar S3 manualmente.
+**Decision**: Use a dedicated Supabase Storage bucket (`comprobantes-pago`). The client uploads the receipt image and the public/signed URL is stored in `Reserva.comprobanteUrl`.
 
-**Alternativas descartadas**:
-- Supabase Storage: viable, pero requiere más configuración de CORS y políticas.
-- Cloudinary: overkill para MVS, costo adicional.
+**Rationale**: Keeps all backend assets centralized inside Supabase (PostgreSQL + Storage) without third-party dependencies.
 
 ---
 
-### D7: Generación de slots — función utilitaria server-side
+### D7: Package Manager — pnpm
 
-La función `generateSlots(canchaId, fechaInicio, fechaFin)` en `lib/generate-slots.ts`:
-1. Consulta los `HorarioDisponible` de la cancha
-2. Para cada día en el rango que tenga horario, genera intervalos de `duracionSlotMin`
-3. Usa `prisma.slot.createMany({ skipDuplicates: true })` para inserción idempotente
+**Decision**: Dependency management and command execution use `pnpm` and `pnpm dlx`.
 
-## Risks / Trade-offs
+---
 
-- **Row-level isolation sin RLS activo** → Si un endpoint olvida filtrar por `complejoId`, hay data leak. Mitigación: helper `withTenant(complejoId)` obligatorio en todos los servicios + RLS en Supabase como respaldo.
-- **UploadThing como dependencia externa** → Si el servicio cae, los clientes no pueden subir comprobantes. Mitigación: para MVP es aceptable; a futuro se puede migrar a Supabase Storage.
-- **Sesiones NextAuth duales** → Complejidad en middleware. Mitigación: el middleware distingue rutas `/dashboard` y `/admin` (sesión admin) de `/mis-reservas` (sesión cliente) claramente.
-- **Generación masiva de slots** → Para un rango de 30 días con 16 horas/día podría generar ~480 slots por cancha. Mitigación: `createMany` con `skipDuplicates` es eficiente; limitar el rango máximo a 60 días por request.
+### D8: Slot Generation — Server-side Utility Function
 
-## Open Questions
-
-- ¿Se requiere confirmación por email al cliente al crear la reserva? (Implicaría añadir Resend o similar — excluido del MVP pero fácil de añadir después)
-- ¿El precio total se calcula siempre como `precioHora * (duracionSlotMin / 60)` o habrá precios especiales por franja horaria?
+The `generateSlotsForCancha(canchaId, fechaInicio, fechaFin)` helper in `lib/generate-slots.ts`:
+1. Reads `HorarioDisponible` for the given court
+2. Generates time intervals respecting `duracionSlotMin` for applicable days
+3. Uses `prisma.slot.createMany({ skipDuplicates: true })` for idempotent execution

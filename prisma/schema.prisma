@@ -1,0 +1,170 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum CourtType {
+  PADEL
+  TURF
+}
+
+enum AccountType {
+  CHECKING
+  SAVINGS
+}
+
+enum SlotStatus {
+  AVAILABLE
+  BOOKED
+  BLOCKED
+}
+
+enum BookingStatus {
+  PAYMENT_PENDING
+  RECEIPT_UPLOADED
+  CONFIRMED
+  CANCELLED
+}
+
+enum ComplexRole {
+  ADMIN
+  STAFF
+}
+
+model Complex {
+  id        String   @id @default(cuid())
+  name      String
+  phone     String
+  address   String
+  slug      String   @unique
+  logoUrl   String?
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  courts       Court[]
+  bankAccounts BankAccount[]
+  users        UserComplex[]
+  bookings     Booking[]
+}
+
+model BankAccount {
+  id            String      @id @default(cuid())
+  complexId     String
+  bankName      String
+  accountNumber String
+  accountType   AccountType @default(SAVINGS)
+  holderName    String
+  holderId      String?
+  isActive      Boolean     @default(true)
+  createdAt     DateTime    @default(now())
+
+  complex       Complex     @relation(fields: [complexId], references: [id], onDelete: Cascade)
+}
+
+model Court {
+  id              String              @id @default(cuid())
+  complexId       String
+  name            String
+  type            CourtType           @default(TURF)
+  pricePerHour    Decimal             @db.Decimal(10, 2)
+  slotDurationMin Int                 @default(60)
+  isActive        Boolean             @default(true)
+  createdAt       DateTime            @default(now())
+
+  complex         Complex             @relation(fields: [complexId], references: [id], onDelete: Cascade)
+  schedules       AvailableSchedule[]
+  slots           Slot[]
+  bookings        Booking[]
+}
+
+model AvailableSchedule {
+  id        String   @id @default(cuid())
+  courtId   String
+  dayOfWeek Int      // 0 = Sunday, 1 = Monday, ... 6 = Saturday
+  openTime  String   // "HH:mm" format, e.g. "08:00"
+  closeTime String   // "HH:mm" format, e.g. "22:00"
+  isActive  Boolean  @default(true)
+
+  court     Court    @relation(fields: [courtId], references: [id], onDelete: Cascade)
+
+  @@unique([courtId, dayOfWeek])
+}
+
+model Slot {
+  id        String     @id @default(cuid())
+  courtId   String
+  date      DateTime   @db.Date
+  startTime String     // "HH:mm", e.g. "08:00"
+  endTime   String     // "HH:mm", e.g. "09:00"
+  status    SlotStatus @default(AVAILABLE)
+
+  court     Court      @relation(fields: [courtId], references: [id], onDelete: Cascade)
+  booking   Booking?
+
+  @@unique([courtId, date, startTime])
+}
+
+model Booking {
+  id            String        @id @default(cuid())
+  slotId        String        @unique // Strict 1:1 relation with Slot (anti-overbooking)
+  courtId       String
+  complexId     String
+  customerId    String?       // Optional for guest bookings
+  customerName  String
+  customerPhone String
+  customerEmail String?
+  status        BookingStatus @default(PAYMENT_PENDING)
+  receiptUrl    String?
+  totalAmount   Decimal       @db.Decimal(10, 2)
+  notes         String?
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  slot          Slot          @relation(fields: [slotId], references: [id], onDelete: Restrict)
+  court         Court         @relation(fields: [courtId], references: [id], onDelete: Restrict)
+  complex       Complex       @relation(fields: [complexId], references: [id], onDelete: Restrict)
+  customer      Customer?     @relation(fields: [customerId], references: [id], onDelete: SetNull)
+}
+
+model Customer {
+  id            String    @id @default(cuid())
+  name          String
+  email         String    @unique
+  phone         String?
+  passwordHash  String
+  emailVerified Boolean   @default(false)
+  createdAt     DateTime  @default(now())
+
+  bookings      Booking[]
+}
+
+model User {
+  id           String        @id @default(cuid())
+  name         String
+  email        String        @unique
+  passwordHash String
+  isSuperAdmin Boolean       @default(false)
+  createdAt    DateTime      @default(now())
+
+  complexes    UserComplex[]
+}
+
+model UserComplex {
+  id        String      @id @default(cuid())
+  userId    String
+  complexId String
+  role      ComplexRole @default(STAFF)
+
+  user      User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  complex   Complex     @relation(fields: [complexId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, complexId])
+}

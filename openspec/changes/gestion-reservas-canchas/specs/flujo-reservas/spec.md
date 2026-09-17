@@ -1,60 +1,60 @@
 ## Purpose
 
-Define el ciclo completo de una reserva: desde la selección de un slot disponible por parte del jugador hasta la confirmación final por el administrador tras validar el comprobante de pago. Soporta tanto jugadores invitados (sin cuenta) como jugadores con cuenta registrada.
+Defines the complete reservation lifecycle: from slot selection by a player to final admin confirmation upon validating bank transfer receipts. Supports both guest visitors and registered player accounts.
 
 ## ADDED Requirements
 
-### Requirement: Creación de reserva por jugador
-El sistema SHALL permitir crear una reserva para un slot disponible. El jugador DEBE proveer nombre, teléfono y email (opcional si es invitado) o estar autenticado como Cliente. El slot pasa a estado RESERVADO en la misma transacción.
+### Requirement: Booking creation by player
+The system SHALL allow booking an available slot. The player MUST provide name, phone, and optional email (if guest) or be authenticated as a registered Customer. The slot transitions to RESERVADO status within the same atomic database transaction.
 
-#### Scenario: Reserva como invitado exitosa
-- **WHEN** un visitante envía slotId, nombreCliente y telefonoCliente válidos para un slot DISPONIBLE
-- **THEN** el sistema crea la reserva en estado PENDIENTE_PAGO, el slot cambia a RESERVADO, y la respuesta incluye las instrucciones de pago (cuentas bancarias del complejo)
+#### Scenario: Successful guest booking
+- **WHEN** a visitor submits valid slotId, nombreCliente, and telefonoCliente for a DISPONIBLE slot
+- **THEN** the system creates the booking in PENDIENTE_PAGO state, marks the slot as RESERVADO, and returns payment instructions (active bank accounts for that complex)
 
-#### Scenario: Reserva en slot no disponible
-- **WHEN** un visitante intenta reservar un slot en estado RESERVADO o BLOQUEADO
-- **THEN** el sistema rechaza con error 409
+#### Scenario: Booking unavailable slot
+- **WHEN** a visitor attempts to book an already RESERVADO or BLOQUEADO slot
+- **THEN** the system rejects the request with HTTP 409 Conflict
 
-#### Scenario: Reserva como cliente autenticado
-- **WHEN** un Cliente autenticado crea una reserva
-- **THEN** el sistema asocia la reserva al `clienteId` y sus datos de perfil se pre-rellenan
+#### Scenario: Booking as authenticated customer
+- **WHEN** an authenticated customer creates a booking
+- **THEN** the system attaches the booking to `clienteId` and prepopulates customer profile information
 
-### Requirement: Subida de comprobante de pago
-El sistema SHALL permitir al jugador (invitado o autenticado) subir un archivo de imagen como comprobante de pago de una reserva en estado PENDIENTE_PAGO. La reserva cambia a COMPROBANTE_SUBIDO.
+### Requirement: Payment proof upload
+The system SHALL allow players (guest or authenticated) to upload an image receipt for any booking in PENDIENTE_PAGO status. The booking state transitions to COMPROBANTE_SUBIDO.
 
-#### Scenario: Subir comprobante válido
-- **WHEN** el jugador sube una imagen (JPG, PNG, PDF ≤ 5MB) para una reserva PENDIENTE_PAGO
-- **THEN** el sistema almacena el archivo, guarda la URL en `comprobanteUrl` y cambia el estado a COMPROBANTE_SUBIDO
+#### Scenario: Valid receipt upload
+- **WHEN** the player uploads an image (JPG, PNG, PDF ≤ 5MB) for a PENDIENTE_PAGO booking
+- **THEN** the system stores the file in Supabase Storage, saves the URL in `comprobanteUrl`, and sets status to COMPROBANTE_SUBIDO
 
-#### Scenario: Formato de archivo inválido
-- **WHEN** el jugador intenta subir un archivo con extensión no permitida
-- **THEN** el sistema rechaza con error 422
+#### Scenario: Invalid file format
+- **WHEN** the player attempts to upload an unsupported format
+- **THEN** the system rejects the upload with HTTP 422 Unprocessable Entity
 
-### Requirement: Confirmación de reserva por administrador
-El sistema SHALL permitir al ADMIN o STAFF cambiar el estado de una reserva de COMPROBANTE_SUBIDO a CONFIRMADA tras validar el comprobante.
+### Requirement: Admin reservation confirmation
+The system SHALL allow ADMIN or STAFF users to transition a booking from COMPROBANTE_SUBIDO to CONFIRMADA upon verifying the bank transfer.
 
-#### Scenario: Confirmar reserva
-- **WHEN** el ADMIN cambia el estado de una reserva COMPROBANTE_SUBIDO a CONFIRMADA
-- **THEN** el sistema actualiza el estado y registra el timestamp de confirmación
+#### Scenario: Confirm booking
+- **WHEN** the ADMIN updates a COMPROBANTE_SUBIDO booking to CONFIRMADA
+- **THEN** the system marks the reservation as confirmed and logs the updated timestamp
 
-#### Scenario: STAFF puede confirmar
-- **WHEN** un usuario con rol STAFF en el complejo confirma una reserva
-- **THEN** el sistema acepta la operación igual que si fuera un ADMIN
+#### Scenario: STAFF confirmation permission
+- **WHEN** a STAFF user confirms a booking
+- **THEN** the system processes the confirmation with the same privileges as an ADMIN
 
-### Requirement: Cancelación de reserva
-El sistema SHALL permitir cancelar una reserva en cualquier estado (excepto CONFIRMADA sin autorización explícita de ADMIN). Al cancelar, el slot vuelve a estado DISPONIBLE.
+### Requirement: Booking cancellation and slot release
+The system SHALL allow cancellation of reservations. Upon cancellation, the associated slot reverts to DISPONIBLE status within an atomic transaction.
 
-#### Scenario: ADMIN cancela reserva
-- **WHEN** el ADMIN cancela una reserva en cualquier estado
-- **THEN** la reserva pasa a CANCELADA y el slot asociado vuelve a DISPONIBLE
+#### Scenario: ADMIN cancels booking
+- **WHEN** the ADMIN cancels a booking
+- **THEN** the reservation status becomes CANCELADA and the associated slot reverts to DISPONIBLE
 
-#### Scenario: Jugador cancela reserva PENDIENTE_PAGO
-- **WHEN** el jugador propietario de una reserva PENDIENTE_PAGO solicita cancelación
-- **THEN** la reserva pasa a CANCELADA y el slot vuelve a DISPONIBLE
+#### Scenario: Player cancels pending booking
+- **WHEN** a player requests cancellation of their PENDIENTE_PAGO booking
+- **THEN** the reservation transitions to CANCELADA and the slot reverts to DISPONIBLE
 
-### Requirement: Instrucciones de pago en la respuesta de reserva
-El sistema SHALL incluir en la respuesta de creación de reserva las cuentas bancarias activas del complejo para que el jugador sepa a dónde transferir.
+### Requirement: Payment instructions in reservation response
+The system SHALL return the complex's active bank accounts in the reservation response so players immediately know where to transfer.
 
-#### Scenario: Instrucciones incluidas
-- **WHEN** se crea una reserva exitosamente
-- **THEN** la respuesta incluye al menos una cuenta bancaria activa del complejo con banco, número, tipo y titular
+#### Scenario: Payment instructions included
+- **WHEN** a reservation is created successfully
+- **THEN** the response includes active bank accounts showing bank name, account number, account type, and account holder

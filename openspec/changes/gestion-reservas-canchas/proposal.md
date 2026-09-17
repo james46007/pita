@@ -1,39 +1,39 @@
 ## Why
 
-El mercado ecuatoriano carece de un sistema centralizado y asequible para que complejos deportivos (canchas sintéticas y de pádel) gestionen sus reservas en línea. Hoy la coordinación ocurre por WhatsApp y llamadas telefónicas, lo que genera overbooking, pérdida de clientes y trabajo manual para los administradores. Se construye este SaaS multi-tenant para resolver ese problema y monetizarlo como plataforma.
+The Ecuadorian market lacks a centralized, accessible system for sports complexes (synthetic soccer fields and padel courts) to manage reservations online. Today, booking coordination happens manually through WhatsApp and phone calls, resulting in overbooking, lost customers, and heavy operational workload for administrators. This multi-tenant SaaS is built to solve this problem and monetize as a platform.
 
 ## What Changes
 
-- Nuevo sistema SaaS multi-tenant de gestión de reservas para complejos deportivos.
-- Los jugadores pueden reservar turnos en línea como invitados o con cuenta registrada.
-- Flujo de confirmación manual con comprobante de pago (transferencia bancaria), adaptado al mercado ecuatoriano.
-- Panel de administración (`/dashboard`) para que ADMIN y STAFF gestionen canchas, horarios, slots y reservas.
-- Panel de super-administración (`/admin`) para gestionar complejos y usuarios a nivel plataforma.
-- Generación automática de slots a partir de horarios semanales definidos por el admin, con opción de crear/bloquear slots manualmente.
-- Anti-overbooking garantizado mediante constraint único `(canchaId, fecha, horaInicio)` en la base de datos.
-- Soporte de múltiples cuentas bancarias por complejo para instrucciones de pago al cliente.
+- New multi-tenant SaaS booking management system for sports complexes.
+- Players can book slots online as guests or with a registered account.
+- Manual payment proof verification flow (bank transfer), adapted to the local market payment habits.
+- Admin dashboard (`/dashboard`) for ADMIN and STAFF to manage courts, schedules, slots, and bookings.
+- Super-admin panel (`/admin`) to manage complexes and platform-wide users.
+- Automated slot generation from weekly operational schedules defined by the admin, with manual slot creation/blocking capabilities.
+- Anti-overbooking guaranteed via database unique constraint `(canchaId, fecha, horaInicio)`.
+- Support for multiple bank accounts per complex for customer payment instructions.
 
 ## Capabilities
 
 ### New Capabilities
 
-- `multitenant-complejos`: Gestión de complejos deportivos como tenants aislados (nombre, teléfono, dirección, slug). Incluye cuentas bancarias por complejo.
-- `canchas-y-horarios`: CRUD de canchas (tipo PADEL/SINTETICA, precio/hora, duración de slot) y definición de horarios semanales de disponibilidad.
-- `slots-y-disponibilidad`: Generación automática y gestión manual de slots de reserva. Estados DISPONIBLE / RESERVADO / BLOQUEADO.
-- `flujo-reservas`: Ciclo completo de reserva: selección de slot → datos del cliente → instrucciones de pago → subida de comprobante → confirmación o cancelación por el admin. Estados: PENDIENTE_PAGO / COMPROBANTE_SUBIDO / CONFIRMADA / CANCELADA.
-- `autenticacion-usuarios`: Autenticación NextAuth para administradores (SUPER_ADMIN) y staff de complejos (ADMIN / STAFF via tabla pivot UsuarioComplejo). Los jugadores tienen autenticación separada (Cliente) con soporte de reserva como invitado.
-- `dashboard-admin`: Panel privado `/dashboard` para ADMIN/STAFF: vista de agenda del día, gestión de reservas, canchas, horarios, slots manuales y configuración del complejo.
-- `panel-superadmin`: Sección `/admin` exclusiva para SUPER_ADMIN: gestión de complejos y usuarios de la plataforma.
+- `multitenant-complejos`: Multi-tenant complex management as isolated tenants (name, phone, address, slug), including bank accounts per complex.
+- `canchas-y-horarios`: Court CRUD (type PADEL/SINTETICA, hourly rate, slot duration) and weekly operational schedule configuration.
+- `slots-y-disponibilidad`: Automated generation and manual slot management. States: DISPONIBLE / RESERVADO / BLOQUEADO.
+- `flujo-reservas`: End-to-end booking cycle: slot selection → customer details → payment instructions → receipt upload → admin approval or rejection. States: PENDIENTE_PAGO / COMPROBANTE_SUBIDO / CONFIRMADA / CANCELADA.
+- `autenticacion-usuarios`: Dual NextAuth authentication for administrators (SUPER_ADMIN) and complex staff (ADMIN / STAFF via UsuarioComplejo pivot). Separate player authentication (Cliente) with guest booking support.
+- `dashboard-admin`: Private `/dashboard` panel for ADMIN/STAFF: daily schedule overview, bookings management, courts, schedules, manual slots, and complex configuration.
+- `panel-superadmin`: Dedicated `/admin` section for SUPER_ADMIN: platform-wide complex and user management.
 
 ### Modified Capabilities
 
-*(Proyecto nuevo — sin capabilities preexistentes)*
+*(New project — no pre-existing capabilities)*
 
 ## Impact
 
 - **Stack**: Next.js 14 App Router, TypeScript, Tailwind CSS, shadcn/ui, Prisma ORM, PostgreSQL (Supabase).
-- **Base de datos**: Nuevo schema Prisma con 9 entidades: `ComplejoDeportivo`, `CuentaBancaria`, `Cancha`, `HorarioDisponible`, `Slot`, `Reserva`, `Cliente`, `Usuario`, `UsuarioComplejo`.
-- **Autenticación**: NextAuth.js con dos sesiones independientes (admins vs. clientes).
-- **APIs**: Endpoints REST bajo `/api/` para reservas, slots, comprobantes y operaciones de dashboard.
-- **Aislamiento de datos**: Row-level isolation por `complejoId` + Row Level Security de Supabase.
-- **Dependencias nuevas**: `next`, `prisma`, `@prisma/client`, `next-auth`, `@uploadthing/react` (comprobantes), `shadcn/ui`, `tailwindcss`, `zod`.
+- **Database**: New Prisma schema with 9 models: `ComplejoDeportivo`, `CuentaBancaria`, `Cancha`, `HorarioDisponible`, `Slot`, `Reserva`, `Cliente`, `Usuario`, `UsuarioComplejo`.
+- **Authentication**: NextAuth.js with two isolated sessions (admins vs. players).
+- **APIs**: REST endpoints under `/api/` for bookings, slots, receipts, and dashboard operations.
+- **Data Isolation**: Row-level isolation by `complejoId` + Supabase Row Level Security.
+- **Dependencies**: `next`, `prisma`, `@prisma/client`, `next-auth`, `@supabase/supabase-js`, `shadcn/ui`, `tailwindcss`, `zod`.

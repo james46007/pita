@@ -1,27 +1,27 @@
 ## Purpose
 
-Sección de administración global de la plataforma SaaS, accesible únicamente al SUPER_ADMIN en `/admin`. Permite crear y gestionar los complejos deportivos registrados y los usuarios administradores de cada uno.
+Global administration section for the SaaS platform, restricted strictly to SUPER_ADMIN users at `/admin`. Enables creating and managing sports complexes and assigning administrator/staff users.
 
 ## ADDED Requirements
 
-### Requirement: Gestión global de complejos
-El sistema SHALL permitir al SUPER_ADMIN listar, crear, editar y desactivar complejos deportivos desde el panel `/admin`.
+### Requirement: Global complex management
+The system SHALL allow the SUPER_ADMIN to list, create, update, and deactivate sports complexes from `/admin`.
 
-#### Scenario: Listar todos los complejos
-- **WHEN** el SUPER_ADMIN accede a `/admin/complejos`
-- **THEN** el sistema muestra todos los complejos registrados con su nombre, slug y estado (activo/inactivo)
+#### Scenario: List all complexes
+- **WHEN** the SUPER_ADMIN accesses `/admin/complejos`
+- **THEN** the system displays all registered complexes with name, slug, contact information, metrics, and active status
 
-#### Scenario: Desactivar complejo
-- **WHEN** el SUPER_ADMIN desactiva un complejo
-- **THEN** el sistema marca el complejo como inactivo y sus canchas dejan de aparecer en la vista pública
+#### Scenario: Deactivate complex
+- **WHEN** the SUPER_ADMIN deactivates a complex
+- **THEN** the system flags it as inactive and excludes its courts from public booking views
 
-### Requirement: Gestión de usuarios administradores
-El sistema SHALL permitir al SUPER_ADMIN crear usuarios y asignarles roles ADMIN o STAFF en uno o más complejos.
+### Requirement: Admin and staff user management
+The system SHALL allow the SUPER_ADMIN to create platform users and assign them ADMIN or STAFF roles across one or more complexes.
 
-#### Scenario: Crear usuario admin para un complejo
-- **WHEN** el SUPER_ADMIN crea un usuario con email, nombre y contraseña, y lo asigna con rol ADMIN al complejo X
-- **THEN** el sistema crea el usuario, genera el registro en UsuarioComplejo y el nuevo ADMIN puede iniciar sesión
+#### Scenario: Create admin user for complex
+- **WHEN** the SUPER_ADMIN creates a user with email, name, and password, assigning the ADMIN role for complex X
+- **THEN** the system creates the user, generates the `UsuarioComplejo` record, and enables immediate login
 
-#### Scenario: Acceso exclusivo de SUPER_ADMIN al panel
-- **WHEN** un usuario con rol ADMIN intenta acceder a `/admin`
-- **THEN** el sistema retorna 403 o redirige al dashboard del complejo
+#### Scenario: Exclusive SUPER_ADMIN panel access
+- **WHEN** a non-superadmin user attempts to access `/admin`
+- **THEN** the system redirects them to `/dashboard` with HTTP 403 authorization handling

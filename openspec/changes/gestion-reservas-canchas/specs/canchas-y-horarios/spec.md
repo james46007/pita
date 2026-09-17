@@ -1,34 +1,34 @@
 ## Purpose
 
-Permite a los administradores definir las canchas disponibles en su complejo (tipo, precio, duración de slot) y configurar los horarios semanales de disponibilidad que determinan cuándo se pueden realizar reservas.
+Allows administrators to define courts available in their sports complex (type, price, slot duration) and configure weekly operational schedules that determine when reservations can take place.
 
 ## ADDED Requirements
 
-### Requirement: CRUD de canchas
-El sistema SHALL permitir al ADMIN crear, editar, desactivar y listar canchas de su complejo, con los campos: nombre, tipo (PADEL / SINTETICA), precio por hora y duración de slot en minutos.
+### Requirement: Court CRUD operations
+The system SHALL allow the ADMIN to create, update, deactivate, and list courts for their complex with the following fields: name, type (PADEL / SINTETICA), price per hour, and slot duration in minutes.
 
-#### Scenario: Crear cancha
-- **WHEN** el ADMIN envía nombre, tipo, precioHora y duracionSlotMin válidos
-- **THEN** el sistema crea la cancha activa asociada al complejo del ADMIN
+#### Scenario: Create court
+- **WHEN** the ADMIN submits valid name, type, precioHora, and duracionSlotMin
+- **THEN** the system creates an active court associated with the ADMIN's complex
 
-#### Scenario: Desactivar cancha
-- **WHEN** el ADMIN desactiva una cancha
-- **THEN** el sistema la marca como inactiva y deja de mostrarla en la vista pública de reservas
+#### Scenario: Deactivate court
+- **WHEN** the ADMIN deactivates a court
+- **THEN** the system flags it as inactive and excludes it from the public booking interface
 
-### Requirement: Definición de horarios semanales
-El sistema SHALL permitir al ADMIN definir horarios de disponibilidad por cancha y por día de la semana (0=Domingo … 6=Sábado), especificando hora de apertura y hora de cierre.
+### Requirement: Weekly schedule configuration
+The system SHALL allow the ADMIN to define availability schedules per court and day of the week (0=Sunday … 6=Saturday), specifying opening and closing times.
 
-#### Scenario: Definir horario por día
-- **WHEN** el ADMIN crea un horario para una cancha en un día de la semana
-- **THEN** el sistema guarda el intervalo de disponibilidad para ese día
+#### Scenario: Define schedule by day
+- **WHEN** the ADMIN creates a schedule for a court on a given day of the week
+- **THEN** the system persists the operational time window for that day
 
-#### Scenario: Horarios distintos por día
-- **WHEN** el ADMIN define horarios diferentes para Lunes y Sábado en la misma cancha
-- **THEN** el sistema almacena ambos intervalos independientemente
+#### Scenario: Distinct schedules per day
+- **WHEN** the ADMIN configures different hours for Monday and Saturday on the same court
+- **THEN** the system stores both intervals independently
 
-### Requirement: Precio visible al público
-El sistema SHALL mostrar el precio por hora de cada cancha en la vista pública de selección de slot.
+### Requirement: Public rate visibility
+The system SHALL display the hourly rate of each court in the public slot selection view.
 
-#### Scenario: Cliente ve el precio
-- **WHEN** un visitante consulta los slots disponibles de una cancha
-- **THEN** el sistema incluye el campo `precioHora` en la respuesta
+#### Scenario: Customer sees price
+- **WHEN** a visitor browses available slots for a court
+- **THEN** the system includes the `precioHora` in the response

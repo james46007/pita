@@ -1,52 +1,52 @@
 ## Purpose
 
-Gestiona los slots de tiempo disponibles para reserva en cada cancha. Los slots pueden generarse automáticamente a partir de los horarios semanales o crearse y bloquearse manualmente por el administrador. El constraint único en base de datos garantiza que no existan dos reservas para el mismo slot (anti-overbooking).
+Manages time slots available for booking on each court. Slots can be generated automatically from weekly operational schedules or created/locked manually by administrators. The unique database constraint guarantees that no two bookings can ever exist for the same slot (anti-overbooking).
 
 ## ADDED Requirements
 
-### Requirement: Generación automática de slots
-El sistema SHALL generar slots de tiempo a partir de los horarios semanales de una cancha cuando el administrador solicita generar disponibilidad para un rango de fechas.
+### Requirement: Automated slot generation
+The system SHALL generate time slots derived from the court's weekly schedules whenever an administrator triggers availability generation for a date range.
 
-#### Scenario: Generar slots para una semana
-- **WHEN** el ADMIN solicita generar slots para la cancha X del 2024-01-01 al 2024-01-07
-- **THEN** el sistema crea registros de slot en estado DISPONIBLE para cada intervalo válido según los horarios definidos, sin duplicar slots existentes
+#### Scenario: Generate slots for a week
+- **WHEN** the ADMIN requests slot generation for court X between 2024-01-01 and 2024-01-07
+- **THEN** the system creates slot records in DISPONIBLE state for each valid interval according to configured schedules, without duplicating existing slots
 
-#### Scenario: Sin horario definido para un día
-- **WHEN** se solicita generar slots para un día sin horario configurado
-- **THEN** el sistema no crea slots para ese día
+#### Scenario: Day without configured schedule
+- **WHEN** slot generation is triggered for a day lacking schedule definitions
+- **THEN** the system creates zero slots for that day
 
-### Requirement: Creación manual de slots
-El sistema SHALL permitir al ADMIN crear slots individuales para una cancha en una fecha y hora específica.
+### Requirement: Manual slot creation
+The system SHALL allow the ADMIN to create individual slots for a court on a specific date and time.
 
-#### Scenario: Crear slot manual
-- **WHEN** el ADMIN crea un slot para cancha X, fecha Y, horaInicio Z
-- **THEN** el sistema crea el slot en estado DISPONIBLE si no existe ya un slot con esa combinación
+#### Scenario: Create manual slot
+- **WHEN** the ADMIN creates a slot for court X, date Y, horaInicio Z
+- **THEN** the system creates the slot in DISPONIBLE state if no slot exists for that combination
 
-#### Scenario: Conflicto de slot duplicado
-- **WHEN** el ADMIN intenta crear un slot con la misma (canchaId, fecha, horaInicio) que uno existente
-- **THEN** el sistema rechaza la operación con error 409
+#### Scenario: Duplicate slot conflict
+- **WHEN** the ADMIN attempts to create a slot with identical (canchaId, fecha, horaInicio)
+- **THEN** the system rejects the operation with HTTP 409 Conflict
 
-### Requirement: Bloqueo de slots
-El sistema SHALL permitir al ADMIN cambiar el estado de un slot a BLOQUEADO para impedir reservas (mantenimiento, feriados, etc.).
+### Requirement: Slot locking
+The system SHALL allow the ADMIN to toggle slot status to BLOQUEADO to prevent customer bookings (court maintenance, tournaments, holidays).
 
-#### Scenario: Bloquear slot disponible
-- **WHEN** el ADMIN bloquea un slot en estado DISPONIBLE
-- **THEN** el sistema cambia su estado a BLOQUEADO y deja de mostrarlo como disponible al público
+#### Scenario: Lock available slot
+- **WHEN** the ADMIN locks a DISPONIBLE slot
+- **THEN** the system updates its state to BLOQUEADO and excludes it from public availability queries
 
-#### Scenario: Bloquear slot reservado
-- **WHEN** el ADMIN intenta bloquear un slot en estado RESERVADO
-- **THEN** el sistema rechaza la operación con error 422 indicando que el slot ya tiene una reserva activa
+#### Scenario: Lock already reserved slot
+- **WHEN** the ADMIN attempts to lock a RESERVADO slot
+- **THEN** the system rejects the operation with HTTP 422 Unprocessable Entity stating an active booking exists
 
-### Requirement: Consulta pública de disponibilidad
-El sistema SHALL exponer los slots en estado DISPONIBLE de una cancha para una fecha dada, accesibles sin autenticación.
+### Requirement: Public availability query
+The system SHALL expose DISPONIBLE slots for a given court and date via an unauthenticated public API.
 
-#### Scenario: Consultar disponibilidad
-- **WHEN** un visitante consulta los slots disponibles de la cancha X para la fecha Y
-- **THEN** el sistema retorna únicamente los slots con estado DISPONIBLE, incluyendo horaInicio, horaFin y montoTotal calculado
+#### Scenario: Query availability
+- **WHEN** a visitor queries available slots for court X on date Y
+- **THEN** the system returns exclusively DISPONIBLE slots, including horaInicio, horaFin, and calculated total amount
 
-### Requirement: Anti-overbooking por constraint de base de datos
-El sistema SHALL garantizar a nivel de base de datos que no existan dos reservas confirmadas para el mismo slot, mediante un índice único `(canchaId, fecha, horaInicio)` en la tabla Slot y una relación 1:1 entre Slot y Reserva.
+### Requirement: Database-enforced anti-overbooking
+The system SHALL guarantee at database level that duplicate bookings cannot exist for the same slot, using a unique compound index `(canchaId, fecha, horaInicio)` on the Slot model and a 1:1 relation between Slot and Reserva.
 
-#### Scenario: Intento de doble reserva simultánea
-- **WHEN** dos clientes intentan reservar el mismo slot al mismo tiempo
-- **THEN** solo una transacción tiene éxito; la segunda recibe error 409 indicando que el slot ya no está disponible
+#### Scenario: Concurrent double-booking attempt
+- **WHEN** two customers attempt to book the exact same slot concurrently
+- **THEN** exactly one transaction succeeds; the second receives HTTP 409 Conflict indicating the slot is no longer available
