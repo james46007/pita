@@ -3,7 +3,7 @@ import { getServerSession } from "next-auth"
 import Link from "next/link"
 import { authOptionsAdmin } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
-import { LayoutDashboard, Calendar, Trophy, Clock, Settings, LogOut, ShieldAlert } from "lucide-react"
+import { LayoutDashboard, Calendar, Trophy, Clock, Settings, LogOut, ShieldAlert, BarChart3 } from "lucide-react"
 
 export default async function DashboardLayout({
   children,
@@ -58,6 +58,13 @@ export default async function DashboardLayout({
           >
             <Calendar className="h-4 w-4 text-emerald-600" />
             All Bookings
+          </Link>
+          <Link
+            href="/dashboard/metricas"
+            className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-zinc-700 hover:bg-emerald-50 hover:text-emerald-600 dark:text-zinc-300 dark:hover:bg-zinc-800"
+          >
+            <BarChart3 className="h-4 w-4 text-emerald-600" />
+            Metrics & Reports
           </Link>
           <Link
             href="/dashboard/canchas"

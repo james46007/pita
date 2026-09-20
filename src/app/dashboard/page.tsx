@@ -1,12 +1,13 @@
 "use client"
 
 import { useState, useEffect } from "react"
+import Link from "next/link"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
-import { Calendar, Clock, CheckCircle, XCircle, Eye, Loader2 } from "lucide-react"
+import { Calendar, Clock, CheckCircle, XCircle, Eye, Loader2, BarChart3, ArrowRight, DollarSign, Percent } from "lucide-react"
 
 interface BookingItem {
   id: string
@@ -45,6 +46,11 @@ export default function DashboardAgendaPage() {
   const [loading, setLoading] = useState(true)
   const [selectedBooking, setSelectedBooking] = useState<BookingItem | null>(null)
   const [actionLoading, setActionLoading] = useState(false)
+  const [monthlyMetrics, setMonthlyMetrics] = useState<{
+    totalConfirmedRevenue: number
+    occupancyRate: number
+    confirmedBookingsCount: number
+  } | null>(null)
 
   const todayStr = new Date().toISOString().split("T")[0]
 
@@ -65,6 +71,18 @@ export default function DashboardAgendaPage() {
 
   useEffect(() => {
     fetchBookings()
+    fetch("/api/dashboard/metricas/resumen?preset=thismonth")
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (data?.kpis) {
+          setMonthlyMetrics({
+            totalConfirmedRevenue: data.kpis.totalConfirmedRevenue,
+            occupancyRate: data.kpis.occupancyRate,
+            confirmedBookingsCount: data.kpis.confirmedBookingsCount,
+          })
+        }
+      })
+      .catch(() => {})
   }, [])
 
   const handleUpdateStatus = async (bookingId: string, newStatus: "CONFIRMED" | "CANCELLED") => {
@@ -126,10 +144,62 @@ export default function DashboardAgendaPage() {
             Slots and bookings scheduled for today ({todayStr})
           </p>
         </div>
-        <Button variant="outline" size="sm" onClick={fetchBookings} disabled={loading}>
-          <Clock className="mr-2 h-4 w-4" /> Refresh Agenda
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" size="sm" onClick={fetchBookings} disabled={loading}>
+            <Clock className="mr-2 h-4 w-4" /> Refresh Agenda
+          </Button>
+          <Link href="/dashboard/metricas">
+            <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700 text-white">
+              <BarChart3 className="mr-2 h-4 w-4" /> View Analytics
+            </Button>
+          </Link>
+        </div>
       </div>
+
+      {/* Monthly KPI Overview Banner */}
+      {monthlyMetrics && (
+        <Card className="bg-gradient-to-r from-emerald-50/50 via-teal-50/30 to-transparent dark:from-emerald-950/20 dark:via-zinc-900 dark:to-zinc-900 border-emerald-200/60 dark:border-emerald-900/40">
+          <CardContent className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className="flex flex-wrap items-center gap-6">
+              <div>
+                <span className="text-[11px] font-semibold text-zinc-500 uppercase tracking-wider block">
+                  This Month's Revenue
+                </span>
+                <span className="text-xl font-bold text-emerald-600 flex items-center gap-1">
+                  <DollarSign className="h-4 w-4 inline" />
+                  {monthlyMetrics.totalConfirmedRevenue.toLocaleString("en-US", { minimumFractionDigits: 2 })}
+                </span>
+              </div>
+              <div className="h-8 w-px bg-zinc-200 dark:bg-zinc-800 hidden sm:block" />
+              <div>
+                <span className="text-[11px] font-semibold text-zinc-500 uppercase tracking-wider block">
+                  Monthly Occupancy
+                </span>
+                <span className="text-xl font-bold text-blue-600 flex items-center gap-1">
+                  <Percent className="h-4 w-4 inline" />
+                  {monthlyMetrics.occupancyRate}%
+                </span>
+              </div>
+              <div className="h-8 w-px bg-zinc-200 dark:bg-zinc-800 hidden sm:block" />
+              <div>
+                <span className="text-[11px] font-semibold text-zinc-500 uppercase tracking-wider block">
+                  Confirmed Bookings
+                </span>
+                <span className="text-xl font-bold text-zinc-900 dark:text-zinc-100">
+                  {monthlyMetrics.confirmedBookingsCount}
+                </span>
+              </div>
+            </div>
+
+            <Link
+              href="/dashboard/metricas"
+              className="text-xs font-semibold text-emerald-600 hover:text-emerald-700 flex items-center gap-1 self-end sm:self-center"
+            >
+              Full Analytics & Reports <ArrowRight className="h-3.5 w-3.5" />
+            </Link>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Summary Cards */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
