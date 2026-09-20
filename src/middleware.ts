@@ -38,17 +38,19 @@ export async function middleware(req: NextRequest) {
     }
   }
 
+  const authSecret = process.env.NEXTAUTH_SECRET || "default_pita_jwt_secret_key_32bytes_long"
+
   // 2. SuperAdmin Panel Protection (/admin)
   if (url.pathname.startsWith("/admin")) {
     const adminToken =
       (await getToken({
         req,
         cookieName: "auth-admin.session-token",
-        secret: process.env.NEXTAUTH_SECRET,
+        secret: authSecret,
       })) ||
       (await getToken({
         req,
-        secret: process.env.NEXTAUTH_SECRET,
+        secret: authSecret,
       }))
 
     if (!adminToken) {
@@ -70,11 +72,11 @@ export async function middleware(req: NextRequest) {
       (await getToken({
         req,
         cookieName: "auth-admin.session-token",
-        secret: process.env.NEXTAUTH_SECRET,
+        secret: authSecret,
       })) ||
       (await getToken({
         req,
-        secret: process.env.NEXTAUTH_SECRET,
+        secret: authSecret,
       }))
 
     if (!adminToken) {
@@ -90,16 +92,16 @@ export async function middleware(req: NextRequest) {
       (await getToken({
         req,
         cookieName: "auth-cliente.session-token",
-        secret: process.env.NEXTAUTH_SECRET,
+        secret: authSecret,
       })) ||
       (await getToken({
         req,
         cookieName: "auth-admin.session-token",
-        secret: process.env.NEXTAUTH_SECRET,
+        secret: authSecret,
       })) ||
       (await getToken({
         req,
-        secret: process.env.NEXTAUTH_SECRET,
+        secret: authSecret,
       }))
 
     if (!clienteToken) {

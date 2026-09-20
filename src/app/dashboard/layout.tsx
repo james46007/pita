@@ -17,15 +17,18 @@ export default async function DashboardLayout({
   }
 
   const user = session.user as any
-  const firstComplexId = user.complexes?.[0]?.complexId
+  let firstComplexId = user.complexes?.[0]?.complexId
+  let complexName = user.isSuperAdmin ? "Global Administration" : "My Complex"
 
-  let complexName = "My Complex"
   if (firstComplexId) {
     const c = await prisma.complex.findUnique({
       where: { id: firstComplexId },
       select: { name: true },
     })
     if (c) complexName = c.name
+  } else if (user.isSuperAdmin) {
+    const firstC = await prisma.complex.findFirst({ select: { name: true } })
+    if (firstC) complexName = firstC.name
   }
 
   return (

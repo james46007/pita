@@ -1,5 +1,6 @@
 import { getServerSession } from "next-auth"
 import { authOptionsAdmin } from "@/lib/auth"
+import { prisma } from "@/lib/prisma"
 
 export interface UserSessionPayload {
   id: string
@@ -25,10 +26,15 @@ export async function getCurrentUserAndTenant(targetComplexId?: string) {
 
   // SuperAdmin holds global access across any sports complex
   if (user.isSuperAdmin) {
+    let resolvedComplexId: string | undefined = targetComplexId || user.complexes?.[0]?.complexId
+    if (!resolvedComplexId) {
+      const firstAvailable = await prisma.complex.findFirst({ select: { id: true } })
+      resolvedComplexId = firstAvailable?.id
+    }
     return {
       user,
       role: "SUPER_ADMIN" as const,
-      complexId: targetComplexId || user.complexes?.[0]?.complexId,
+      complexId: (resolvedComplexId || "") as string,
     }
   }
 

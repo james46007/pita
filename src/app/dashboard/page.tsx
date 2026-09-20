@@ -60,7 +60,13 @@ export default function DashboardAgendaPage() {
       const res = await fetch(`/api/reservas?fecha=${todayStr}`)
       if (res.ok) {
         const data = await res.json()
-        setBookings(data)
+        if (Array.isArray(data)) {
+          setBookings(data)
+        } else {
+          setBookings([])
+        }
+      } else {
+        setBookings([])
       }
     } catch {
       setBookings([])
@@ -74,11 +80,11 @@ export default function DashboardAgendaPage() {
     fetch("/api/dashboard/metricas/resumen?preset=thismonth")
       .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
-        if (data?.kpis) {
+        if (data && data.kpis) {
           setMonthlyMetrics({
-            totalConfirmedRevenue: data.kpis.totalConfirmedRevenue,
-            occupancyRate: data.kpis.occupancyRate,
-            confirmedBookingsCount: data.kpis.confirmedBookingsCount,
+            totalConfirmedRevenue: Number(data.kpis.totalConfirmedRevenue) || 0,
+            occupancyRate: Number(data.kpis.occupancyRate) || 0,
+            confirmedBookingsCount: Number(data.kpis.confirmedBookingsCount) || 0,
           })
         }
       })
@@ -110,8 +116,8 @@ export default function DashboardAgendaPage() {
   const getCustomerPhone = (b: BookingItem) => b.customerPhone || b.telefonoCliente || ""
   const getTotalAmount = (b: BookingItem) => Number(b.totalAmount ?? b.montoTotal ?? 0)
   const getCourtName = (b: BookingItem) => b.court?.name || b.cancha?.nombre || "Court"
-  const getStartTime = (b: BookingItem) => b.slot.startTime || b.slot.horaInicio || ""
-  const getEndTime = (b: BookingItem) => b.slot.endTime || b.slot.horaFin || ""
+  const getStartTime = (b: BookingItem) => b.slot?.startTime || b.slot?.horaInicio || ""
+  const getEndTime = (b: BookingItem) => b.slot?.endTime || b.slot?.horaFin || ""
   const getReceiptUrl = (b: BookingItem) => b.receiptUrl || b.comprobanteUrl || null
 
   const getBadgeVariant = (status: string) => {
@@ -167,7 +173,7 @@ export default function DashboardAgendaPage() {
                 </span>
                 <span className="text-xl font-bold text-emerald-600 flex items-center gap-1">
                   <DollarSign className="h-4 w-4 inline" />
-                  {monthlyMetrics.totalConfirmedRevenue.toLocaleString("en-US", { minimumFractionDigits: 2 })}
+                  {Number(monthlyMetrics?.totalConfirmedRevenue || 0).toLocaleString("en-US", { minimumFractionDigits: 2 })}
                 </span>
               </div>
               <div className="h-8 w-px bg-zinc-200 dark:bg-zinc-800 hidden sm:block" />
@@ -177,7 +183,7 @@ export default function DashboardAgendaPage() {
                 </span>
                 <span className="text-xl font-bold text-blue-600 flex items-center gap-1">
                   <Percent className="h-4 w-4 inline" />
-                  {monthlyMetrics.occupancyRate}%
+                  {Number(monthlyMetrics?.occupancyRate || 0)}%
                 </span>
               </div>
               <div className="h-8 w-px bg-zinc-200 dark:bg-zinc-800 hidden sm:block" />
@@ -186,7 +192,7 @@ export default function DashboardAgendaPage() {
                   Confirmed Bookings
                 </span>
                 <span className="text-xl font-bold text-zinc-900 dark:text-zinc-100">
-                  {monthlyMetrics.confirmedBookingsCount}
+                  {monthlyMetrics?.confirmedBookingsCount ?? 0}
                 </span>
               </div>
             </div>
@@ -206,14 +212,14 @@ export default function DashboardAgendaPage() {
         <Card>
           <CardHeader className="pb-2">
             <CardDescription className="text-xs font-medium">Total Slots Today</CardDescription>
-            <CardTitle className="text-2xl font-bold">{bookings.length}</CardTitle>
+            <CardTitle className="text-2xl font-bold">{Array.isArray(bookings) ? bookings.length : 0}</CardTitle>
           </CardHeader>
         </Card>
         <Card>
           <CardHeader className="pb-2">
             <CardDescription className="text-xs font-medium">Pending Receipt Audit</CardDescription>
             <CardTitle className="text-2xl font-bold text-blue-600">
-              {bookings.filter((r) => getStatus(r) === "RECEIPT_UPLOADED" || getStatus(r) === "COMPROBANTE_SUBIDO").length}
+              {(Array.isArray(bookings) ? bookings : []).filter((r) => getStatus(r) === "RECEIPT_UPLOADED" || getStatus(r) === "COMPROBANTE_SUBIDO").length}
             </CardTitle>
           </CardHeader>
         </Card>
@@ -221,7 +227,7 @@ export default function DashboardAgendaPage() {
           <CardHeader className="pb-2">
             <CardDescription className="text-xs font-medium">Confirmed</CardDescription>
             <CardTitle className="text-2xl font-bold text-emerald-600">
-              {bookings.filter((r) => getStatus(r) === "CONFIRMED" || getStatus(r) === "CONFIRMADA").length}
+              {(Array.isArray(bookings) ? bookings : []).filter((r) => getStatus(r) === "CONFIRMED" || getStatus(r) === "CONFIRMADA").length}
             </CardTitle>
           </CardHeader>
         </Card>
@@ -240,7 +246,7 @@ export default function DashboardAgendaPage() {
             <div className="flex items-center justify-center p-12 text-zinc-500">
               <Loader2 className="h-6 w-6 animate-spin mr-2" /> Loading agenda...
             </div>
-          ) : bookings.length === 0 ? (
+          ) : !Array.isArray(bookings) || bookings.length === 0 ? (
             <div className="p-12 text-center text-sm text-zinc-500">
               No slots scheduled for today.
             </div>
@@ -257,7 +263,7 @@ export default function DashboardAgendaPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {bookings.map((r) => (
+                {Array.isArray(bookings) && bookings.map((r) => (
                   <TableRow key={r.id}>
                     <TableCell className="font-semibold text-xs">
                       {getStartTime(r)} - {getEndTime(r)}

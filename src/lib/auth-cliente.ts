@@ -4,7 +4,7 @@ import bcrypt from "bcryptjs"
 import { prisma } from "@/lib/prisma"
 
 export const authOptionsCliente: NextAuthOptions = {
-  secret: process.env.NEXTAUTH_SECRET,
+  secret: process.env.NEXTAUTH_SECRET || "default_pita_jwt_secret_key_32bytes_long",
   session: { strategy: "jwt" },
   cookies: {
     sessionToken: {
