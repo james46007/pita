@@ -2,7 +2,7 @@ import { redirect } from "next/navigation"
 import { getServerSession } from "next-auth"
 import Link from "next/link"
 import { authOptionsAdmin } from "@/lib/auth"
-import { ShieldCheck, Building2, Users, ArrowLeft, LogOut } from "lucide-react"
+import { ShieldCheck, Building2, Users, BarChart3, ArrowLeft, LogOut } from "lucide-react"
 
 export default async function AdminLayout({
   children,
@@ -38,6 +38,13 @@ export default async function AdminLayout({
         </div>
 
         <nav className="flex-1 space-y-1 p-4">
+          <Link
+            href="/admin/metricas"
+            className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-zinc-300 hover:bg-zinc-800 hover:text-white transition"
+          >
+            <BarChart3 className="h-4 w-4 text-purple-400" />
+            Global Metrics
+          </Link>
           <Link
             href="/admin/complejos"
             className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-zinc-300 hover:bg-zinc-800 hover:text-white transition"
