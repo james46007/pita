@@ -1,4 +1,5 @@
 import { getServerSession } from "next-auth"
+import { cookies } from "next/headers"
 import { authOptionsAdmin } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 
@@ -24,9 +25,17 @@ export async function getCurrentUserAndTenant(targetComplexId?: string) {
 
   const user = session.user as unknown as UserSessionPayload
 
+  let cookieComplexId: string | undefined
+  try {
+    const cookieStore = await cookies()
+    cookieComplexId = cookieStore.get("active-complex-id")?.value
+  } catch {
+    // cookies() might throw if invoked outside request scope
+  }
+
   // SuperAdmin holds global access across any sports complex
   if (user.isSuperAdmin) {
-    let resolvedComplexId: string | undefined = targetComplexId || user.complexes?.[0]?.complexId
+    let resolvedComplexId: string | undefined = targetComplexId || cookieComplexId || user.complexes?.[0]?.complexId
     if (!resolvedComplexId) {
       const firstAvailable = await prisma.complex.findFirst({ select: { id: true } })
       resolvedComplexId = firstAvailable?.id
@@ -39,15 +48,19 @@ export async function getCurrentUserAndTenant(targetComplexId?: string) {
   }
 
   if (!targetComplexId) {
-    // If target complex is unspecified, default to the first assigned one
-    const firstComplex = user.complexes?.[0]
-    if (!firstComplex) {
+    // If target complex is unspecified, check cookie preference if valid, else default to first
+    const preferredComplex = cookieComplexId
+      ? user.complexes?.find((c) => c.complexId === cookieComplexId)
+      : undefined
+
+    const activeComplex = preferredComplex || user.complexes?.[0]
+    if (!activeComplex) {
       throw new Error("NO_COMPLEX_ASSIGNED")
     }
     return {
       user,
-      role: firstComplex.role,
-      complexId: firstComplex.complexId,
+      role: activeComplex.role,
+      complexId: activeComplex.complexId,
     }
   }
 
