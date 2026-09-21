@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Calendar, Clock, CheckCircle, XCircle, Eye, Loader2, BarChart3, ArrowRight, DollarSign, Percent } from "lucide-react"
+import { OnboardingChecklist, OnboardingData } from "@/components/dashboard/OnboardingChecklist"
 
 interface BookingItem {
   id: string
@@ -51,8 +52,21 @@ export default function DashboardAgendaPage() {
     occupancyRate: number
     confirmedBookingsCount: number
   } | null>(null)
+  const [onboardingData, setOnboardingData] = useState<OnboardingData | null>(null)
 
   const todayStr = new Date().toISOString().split("T")[0]
+
+  const fetchOnboarding = async () => {
+    try {
+      const res = await fetch("/api/dashboard/onboarding")
+      if (res.ok) {
+        const data = await res.json()
+        setOnboardingData(data)
+      }
+    } catch {
+      // ignore silently
+    }
+  }
 
   const fetchBookings = async () => {
     setLoading(true)
@@ -77,6 +91,7 @@ export default function DashboardAgendaPage() {
 
   useEffect(() => {
     fetchBookings()
+    fetchOnboarding()
     fetch("/api/dashboard/metricas/resumen?preset=thismonth")
       .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
@@ -141,6 +156,9 @@ export default function DashboardAgendaPage() {
 
   return (
     <div className="space-y-6">
+      {/* Onboarding Checklist for Complejo Activation */}
+      <OnboardingChecklist data={onboardingData} onRefresh={fetchOnboarding} />
+
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-zinc-900 dark:text-zinc-100">

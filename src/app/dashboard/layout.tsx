@@ -6,6 +6,7 @@ import { prisma } from "@/lib/prisma"
 import { LayoutDashboard, Calendar, Trophy, Clock, Settings, LogOut, ShieldAlert, BarChart3 } from "lucide-react"
 import { getSubscriptionState, SubscriptionState } from "@/lib/subscription"
 import { SubscriptionBanner } from "@/components/dashboard/SubscriptionBanner"
+import { PwaInstallPrompt } from "@/components/pwa/PwaInstallPrompt"
 
 export default async function DashboardLayout({
   children,
@@ -168,6 +169,7 @@ export default async function DashboardLayout({
             <span className="font-bold text-sm">{complexName}</span>
           </div>
           <div className="ml-auto flex items-center gap-3">
+            <PwaInstallPrompt />
             <span className="text-xs text-zinc-500 font-medium">
               Signed in as: <strong className="text-zinc-800 dark:text-zinc-200">{user.name || user.email}</strong>
             </span>
