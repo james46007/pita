@@ -1,7 +1,22 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { Search, Filter, CheckCircle, XCircle, Clock, Eye, FileText } from "lucide-react"
+import {
+  Search,
+  Filter,
+  CheckCircle,
+  XCircle,
+  Clock,
+  Eye,
+  FileText,
+  Plus,
+  Send,
+  Calendar,
+  MessageCircle,
+  Phone,
+  User,
+  DollarSign,
+} from "lucide-react"
 import { toast } from "sonner"
 
 interface BookingItem {
@@ -40,6 +55,20 @@ interface BookingItem {
   }
 }
 
+interface CourtOption {
+  id: string
+  name: string
+  type: string
+  pricePerHour: number
+}
+
+interface AvailableSlotOption {
+  id: string
+  startTime: string
+  endTime: string
+  status: string
+}
+
 export default function BookingsPage() {
   const [bookings, setBookings] = useState<BookingItem[]>([])
   const [loading, setLoading] = useState(true)
@@ -50,6 +79,21 @@ export default function BookingsPage() {
   // Selected Booking Modal
   const [selectedBooking, setSelectedBooking] = useState<BookingItem | null>(null)
   const [actionLoading, setActionLoading] = useState(false)
+
+  // Manual Quick Booking Modal State
+  const [manualModalOpen, setManualModalOpen] = useState(false)
+  const [courts, setCourts] = useState<CourtOption[]>([])
+  const [manualCourtId, setManualCourtId] = useState("")
+  const [manualDate, setManualDate] = useState(new Date().toISOString().split("T")[0])
+  const [availableSlots, setAvailableSlots] = useState<AvailableSlotOption[]>([])
+  const [loadingSlots, setLoadingSlots] = useState(false)
+  const [manualSlotId, setManualSlotId] = useState("")
+  const [manualCustomerName, setManualCustomerName] = useState("")
+  const [manualCustomerPhone, setManualCustomerPhone] = useState("")
+  const [manualCustomerEmail, setManualCustomerEmail] = useState("")
+  const [manualPaymentMethod, setManualPaymentMethod] = useState("CASH")
+  const [manualNotes, setManualNotes] = useState("")
+  const [manualSubmitting, setManualSubmitting] = useState(false)
 
   const fetchBookings = async () => {
     setLoading(true)
@@ -74,6 +118,42 @@ export default function BookingsPage() {
   useEffect(() => {
     fetchBookings()
   }, [statusFilter, dateFilter])
+
+  // Fetch courts for manual booking dialog
+  useEffect(() => {
+    if (manualModalOpen && courts.length === 0) {
+      fetch("/api/dashboard/canchas")
+        .then((res) => res.json())
+        .then((data) => {
+          if (Array.isArray(data) && data.length > 0) {
+            setCourts(data)
+            setManualCourtId(data[0].id)
+          }
+        })
+        .catch(() => toast.error("Failed to load courts"))
+    }
+  }, [manualModalOpen])
+
+  // Fetch available slots when court or date changes
+  useEffect(() => {
+    if (manualModalOpen && manualCourtId && manualDate) {
+      setLoadingSlots(true)
+      setManualSlotId("")
+      fetch(`/api/dashboard/slots?courtId=${manualCourtId}&date=${manualDate}`)
+        .then((res) => res.json())
+        .then((data) => {
+          if (Array.isArray(data)) {
+            const openSlots = data.filter((s: any) => s.status === "AVAILABLE")
+            setAvailableSlots(openSlots)
+            if (openSlots.length > 0) {
+              setManualSlotId(openSlots[0].id)
+            }
+          }
+        })
+        .catch(() => toast.error("Failed to fetch court slots"))
+        .finally(() => setLoadingSlots(false))
+    }
+  }, [manualModalOpen, manualCourtId, manualDate])
 
   const handleUpdateStatus = async (id: string, newStatus: "CONFIRMED" | "CANCELLED") => {
     setActionLoading(true)
@@ -103,6 +183,51 @@ export default function BookingsPage() {
     }
   }
 
+  const handleCreateManualBooking = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!manualSlotId) {
+      toast.error("Please select an available time slot")
+      return
+    }
+    if (!manualCustomerName || !manualCustomerPhone) {
+      toast.error("Please enter customer name and phone")
+      return
+    }
+
+    setManualSubmitting(true)
+    try {
+      const res = await fetch("/api/dashboard/reservas/manual", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          slotId: manualSlotId,
+          customerName: manualCustomerName,
+          customerPhone: manualCustomerPhone,
+          customerEmail: manualCustomerEmail || undefined,
+          paymentMethod: manualPaymentMethod,
+          notes: manualNotes,
+        }),
+      })
+
+      if (!res.ok) {
+        const err = await res.json()
+        throw new Error(err.error || "Failed to create manual booking")
+      }
+
+      toast.success("Manual booking created & confirmed!")
+      setManualModalOpen(false)
+      setManualCustomerName("")
+      setManualCustomerPhone("")
+      setManualCustomerEmail("")
+      setManualNotes("")
+      fetchBookings()
+    } catch (err: any) {
+      toast.error(err.message)
+    } finally {
+      setManualSubmitting(false)
+    }
+  }
+
   const getStatus = (b: BookingItem) => b.status || b.estado || ""
   const getCustomerName = (b: BookingItem) => b.customerName || b.nombreCliente || ""
   const getCustomerPhone = (b: BookingItem) => b.customerPhone || b.telefonoCliente || ""
@@ -113,6 +238,27 @@ export default function BookingsPage() {
   const getEndTime = (b: BookingItem) => b.slot?.endTime || b.slot?.horaFin || ""
   const getDate = (b: BookingItem) => b.slot?.date || b.slot?.fecha || ""
   const getReceiptUrl = (b: BookingItem) => b.receiptUrl || b.comprobanteUrl || null
+
+  const handleOpenWhatsApp = (b: BookingItem) => {
+    const rawPhone = getCustomerPhone(b)
+    const cleanPhone = rawPhone.replace(/\D/g, "")
+    if (!cleanPhone || cleanPhone.length < 7) {
+      toast.error("Customer phone is invalid or missing")
+      return
+    }
+
+    const name = getCustomerName(b)
+    const court = getCourtName(b)
+    const dateFormatted = getDate(b)
+      ? new Date(getDate(b)).toLocaleDateString("en-US", { timeZone: "UTC" })
+      : ""
+    const time = `${getStartTime(b)} - ${getEndTime(b)}`
+    const amount = getTotalAmount(b)
+
+    const text = `¡Hola ${name}! Te confirmamos tu reserva en Cancha ${court} para el ${dateFormatted} de ${time}. Total: $${amount}. ¡Te esperamos en el club!`
+    const url = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(text)}`
+    window.open(url, "_blank")
+  }
 
   const filteredBookings = bookings.filter((b) => {
     if (!search) return true
@@ -161,14 +307,25 @@ export default function BookingsPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+      {/* Page Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b pb-4 dark:border-zinc-800">
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-zinc-900 dark:text-zinc-100">
             Booking Management
           </h1>
           <p className="text-sm text-zinc-500">
-            View, filter, and audit payment-receipts for customer reservations.
+            View, filter, and audit payment receipts, or create manual phone/walk-in reservations.
           </p>
+        </div>
+
+        <div>
+          <button
+            onClick={() => setManualModalOpen(true)}
+            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs transition shadow-md shadow-emerald-900/20"
+          >
+            <Plus className="w-4 h-4" />
+            + New Manual Booking
+          </button>
         </div>
       </div>
 
@@ -234,43 +391,241 @@ export default function BookingsPage() {
                 </tr>
               </thead>
               <tbody className="divide-y dark:divide-zinc-800">
-                {filteredBookings.map((b) => (
-                  <tr key={b.id} className="hover:bg-zinc-50/80 dark:hover:bg-zinc-800/40 transition">
-                    <td className="px-6 py-4">
-                      <p className="font-semibold text-zinc-900 dark:text-zinc-100">{getCustomerName(b)}</p>
-                      <p className="text-xs text-zinc-500">{getCustomerPhone(b)}</p>
-                    </td>
-                    <td className="px-6 py-4">
-                      <span className="font-medium text-zinc-800 dark:text-zinc-200">{getCourtName(b)}</span>
-                      <span className="block text-xs text-zinc-400 capitalize">{getCourtType(b).toLowerCase()}</span>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-zinc-900 dark:text-zinc-100 font-medium">
-                        {getDate(b) ? new Date(getDate(b)).toLocaleDateString("en-US", { timeZone: "UTC" }) : "—"}
-                      </div>
-                      <div className="text-xs text-zinc-500">
-                        {getStartTime(b)} - {getEndTime(b)}
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 font-bold text-zinc-900 dark:text-zinc-100">
-                      ${getTotalAmount(b).toLocaleString("en-US")}
-                    </td>
-                    <td className="px-6 py-4">{renderStatusBadge(getStatus(b))}</td>
-                    <td className="px-6 py-4 text-right">
-                      <button
-                        onClick={() => setSelectedBooking(b)}
-                        className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-200 transition"
-                      >
-                        <Eye className="w-3.5 h-3.5" /> Details
-                      </button>
-                    </td>
-                  </tr>
-                ))}
+                {filteredBookings.map((b) => {
+                  const status = getStatus(b)
+                  const isConfirmed = status === "CONFIRMED" || status === "CONFIRMADA"
+                  return (
+                    <tr key={b.id} className="hover:bg-zinc-50/80 dark:hover:bg-zinc-800/40 transition">
+                      <td className="px-6 py-4">
+                        <p className="font-semibold text-zinc-900 dark:text-zinc-100">{getCustomerName(b)}</p>
+                        <p className="text-xs text-zinc-500">{getCustomerPhone(b)}</p>
+                      </td>
+                      <td className="px-6 py-4">
+                        <span className="font-medium text-zinc-800 dark:text-zinc-200">{getCourtName(b)}</span>
+                        <span className="block text-xs text-zinc-400 capitalize">{getCourtType(b).toLowerCase()}</span>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="text-zinc-900 dark:text-zinc-100 font-medium">
+                          {getDate(b) ? new Date(getDate(b)).toLocaleDateString("en-US", { timeZone: "UTC" }) : "—"}
+                        </div>
+                        <div className="text-xs text-zinc-500">
+                          {getStartTime(b)} - {getEndTime(b)}
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 font-bold text-zinc-900 dark:text-zinc-100">
+                        ${getTotalAmount(b).toLocaleString("en-US")}
+                      </td>
+                      <td className="px-6 py-4">{renderStatusBadge(status)}</td>
+                      <td className="px-6 py-4 text-right">
+                        <div className="inline-flex items-center gap-2">
+                          {isConfirmed && (
+                            <button
+                              onClick={() => handleOpenWhatsApp(b)}
+                              title="Send confirmation via WhatsApp"
+                              className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold rounded-lg bg-emerald-500/15 text-emerald-600 hover:bg-emerald-500/25 border border-emerald-500/30 transition"
+                            >
+                              <MessageCircle className="w-3.5 h-3.5 text-emerald-600" />
+                              <span className="hidden md:inline">WhatsApp</span>
+                            </button>
+                          )}
+                          <button
+                            onClick={() => setSelectedBooking(b)}
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-zinc-700 dark:text-zinc-200 transition"
+                          >
+                            <Eye className="w-3.5 h-3.5" /> Details
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  )
+                })}
               </tbody>
             </table>
           </div>
         )}
       </div>
+
+      {/* Manual Quick-Booking Modal */}
+      {manualModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs overflow-y-auto">
+          <div className="w-full max-w-lg rounded-2xl bg-white dark:bg-zinc-900 border dark:border-zinc-800 p-6 shadow-2xl space-y-5 my-8">
+            <div className="flex items-center justify-between border-b dark:border-zinc-800 pb-3">
+              <div className="flex items-center gap-2">
+                <div className="p-2 rounded-lg bg-emerald-500/10 text-emerald-600">
+                  <Plus className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-bold text-zinc-900 dark:text-zinc-100">
+                    New Manual Reservation
+                  </h3>
+                  <p className="text-xs text-zinc-500">Walk-in or telephone customer quick booking</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setManualModalOpen(false)}
+                className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200"
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleCreateManualBooking} className="space-y-4 text-xs">
+              {/* Court & Date Pickers */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-zinc-700 dark:text-zinc-300 font-semibold mb-1">
+                    Court
+                  </label>
+                  <select
+                    value={manualCourtId}
+                    onChange={(e) => setManualCourtId(e.target.value)}
+                    className="w-full p-2.5 rounded-lg border bg-zinc-50 dark:bg-zinc-800 dark:border-zinc-700 text-zinc-900 dark:text-zinc-100 focus:ring-2 focus:ring-emerald-500"
+                    required
+                  >
+                    {courts.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.name} ({c.type}) - ${c.pricePerHour}/hr
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-zinc-700 dark:text-zinc-300 font-semibold mb-1">
+                    Date
+                  </label>
+                  <input
+                    type="date"
+                    value={manualDate}
+                    onChange={(e) => setManualDate(e.target.value)}
+                    className="w-full p-2 rounded-lg border bg-zinc-50 dark:bg-zinc-800 dark:border-zinc-700 text-zinc-900 dark:text-zinc-100 focus:ring-2 focus:ring-emerald-500"
+                    required
+                  />
+                </div>
+              </div>
+
+              {/* Time Slot Selection */}
+              <div>
+                <label className="block text-zinc-700 dark:text-zinc-300 font-semibold mb-1">
+                  Available Time Slot
+                </label>
+                {loadingSlots ? (
+                  <p className="text-zinc-400 py-2">Loading available slots...</p>
+                ) : availableSlots.length === 0 ? (
+                  <div className="p-3 rounded-lg bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-300">
+                    No available slots for this court on the selected date. (Ensure slots are generated in the "Generate Slots" tab).
+                  </div>
+                ) : (
+                  <select
+                    value={manualSlotId}
+                    onChange={(e) => setManualSlotId(e.target.value)}
+                    className="w-full p-2.5 rounded-lg border bg-zinc-50 dark:bg-zinc-800 dark:border-zinc-700 text-zinc-900 dark:text-zinc-100 focus:ring-2 focus:ring-emerald-500 font-medium"
+                    required
+                  >
+                    {availableSlots.map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {s.startTime} - {s.endTime} (Available)
+                      </option>
+                    ))}
+                  </select>
+                )}
+              </div>
+
+              {/* Customer Information */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t dark:border-zinc-800">
+                <div>
+                  <label className="block text-zinc-700 dark:text-zinc-300 font-semibold mb-1">
+                    Customer Name *
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="e.g. Juan Perez"
+                    value={manualCustomerName}
+                    onChange={(e) => setManualCustomerName(e.target.value)}
+                    className="w-full p-2.5 rounded-lg border bg-zinc-50 dark:bg-zinc-800 dark:border-zinc-700 text-zinc-900 dark:text-zinc-100 focus:ring-2 focus:ring-emerald-500"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-zinc-700 dark:text-zinc-300 font-semibold mb-1">
+                    Customer Phone (WhatsApp) *
+                  </label>
+                  <input
+                    type="tel"
+                    placeholder="e.g. +549112345678"
+                    value={manualCustomerPhone}
+                    onChange={(e) => setManualCustomerPhone(e.target.value)}
+                    className="w-full p-2.5 rounded-lg border bg-zinc-50 dark:bg-zinc-800 dark:border-zinc-700 text-zinc-900 dark:text-zinc-100 focus:ring-2 focus:ring-emerald-500"
+                    required
+                  />
+                </div>
+              </div>
+
+              {/* Payment Method & Email */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-zinc-700 dark:text-zinc-300 font-semibold mb-1">
+                    Payment Method
+                  </label>
+                  <select
+                    value={manualPaymentMethod}
+                    onChange={(e) => setManualPaymentMethod(e.target.value)}
+                    className="w-full p-2.5 rounded-lg border bg-zinc-50 dark:bg-zinc-800 dark:border-zinc-700 text-zinc-900 dark:text-zinc-100 focus:ring-2 focus:ring-emerald-500"
+                  >
+                    <option value="CASH">Cash / Paid on-site (Efectivo)</option>
+                    <option value="TRANSFER">Transfer already verified (Transferencia)</option>
+                    <option value="OTHER">Other / Courtesy</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-zinc-700 dark:text-zinc-300 font-semibold mb-1">
+                    Customer Email (Optional)
+                  </label>
+                  <input
+                    type="email"
+                    placeholder="juan@example.com"
+                    value={manualCustomerEmail}
+                    onChange={(e) => setManualCustomerEmail(e.target.value)}
+                    className="w-full p-2.5 rounded-lg border bg-zinc-50 dark:bg-zinc-800 dark:border-zinc-700 text-zinc-900 dark:text-zinc-100 focus:ring-2 focus:ring-emerald-500"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-zinc-700 dark:text-zinc-300 font-semibold mb-1">
+                  Notes (Optional)
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g. Needs padel rackets rental"
+                  value={manualNotes}
+                  onChange={(e) => setManualNotes(e.target.value)}
+                  className="w-full p-2.5 rounded-lg border bg-zinc-50 dark:bg-zinc-800 dark:border-zinc-700 text-zinc-900 dark:text-zinc-100 focus:ring-2 focus:ring-emerald-500"
+                />
+              </div>
+
+              <div className="flex justify-end gap-2 pt-4 border-t dark:border-zinc-800">
+                <button
+                  type="button"
+                  onClick={() => setManualModalOpen(false)}
+                  className="px-4 py-2 rounded-lg border dark:border-zinc-700 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={manualSubmitting || availableSlots.length === 0}
+                  className="px-5 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-semibold transition disabled:opacity-50"
+                >
+                  {manualSubmitting ? "Creating..." : "Confirm & Book Slot"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {/* Booking Details and Receipt Modal */}
       {selectedBooking && (
@@ -336,9 +691,29 @@ export default function BookingsPage() {
                 </div>
               ) : (
                 <div className="p-4 rounded-lg bg-zinc-50 dark:bg-zinc-800/60 border border-dashed border-zinc-300 dark:border-zinc-700 text-center text-xs text-zinc-500">
-                  The customer has not uploaded a payment receipt yet.
+                  {selectedBooking.notes?.includes("Manual")
+                    ? "In-person / walk-in booking (No receipt required)."
+                    : "The customer has not uploaded a payment receipt yet."}
                 </div>
               )}
+            </div>
+
+            {/* WhatsApp Quick Action in Modal */}
+            <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <MessageCircle className="w-5 h-5 text-emerald-600" />
+                <div>
+                  <p className="text-xs font-semibold text-zinc-800 dark:text-zinc-200">Notify Player via WhatsApp</p>
+                  <p className="text-[11px] text-zinc-500">Sends instant booking details to {getCustomerPhone(selectedBooking)}</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => handleOpenWhatsApp(selectedBooking)}
+                className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition flex items-center gap-1.5"
+              >
+                <Send className="w-3.5 h-3.5" /> Send WhatsApp
+              </button>
             </div>
 
             {/* Action Buttons */}

@@ -27,8 +27,21 @@ export default async function DashboardLayout({
     })
     if (c) complexName = c.name
   } else if (user.isSuperAdmin) {
-    const firstC = await prisma.complex.findFirst({ select: { name: true } })
-    if (firstC) complexName = firstC.name
+    const firstC = await prisma.complex.findFirst({ select: { id: true, name: true } })
+    if (firstC) {
+      complexName = firstC.name
+      firstComplexId = firstC.id
+    }
+  }
+
+  let pendingReceiptsCount = 0
+  if (firstComplexId) {
+    pendingReceiptsCount = await prisma.booking.count({
+      where: {
+        complexId: firstComplexId,
+        status: "RECEIPT_UPLOADED",
+      },
+    })
   }
 
   return (
@@ -57,10 +70,20 @@ export default async function DashboardLayout({
           </Link>
           <Link
             href="/dashboard/reservas"
-            className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-zinc-700 hover:bg-emerald-50 hover:text-emerald-600 dark:text-zinc-300 dark:hover:bg-zinc-800"
+            className="flex items-center justify-between rounded-lg px-3 py-2 text-sm font-medium text-zinc-700 hover:bg-emerald-50 hover:text-emerald-600 dark:text-zinc-300 dark:hover:bg-zinc-800"
           >
-            <Calendar className="h-4 w-4 text-emerald-600" />
-            All Bookings
+            <div className="flex items-center gap-3">
+              <Calendar className="h-4 w-4 text-emerald-600" />
+              <span>All Bookings</span>
+            </div>
+            {pendingReceiptsCount > 0 && (
+              <span
+                className="inline-flex items-center justify-center px-2 py-0.5 text-xs font-bold leading-none text-amber-900 bg-amber-200 rounded-full dark:bg-amber-900/60 dark:text-amber-200 animate-pulse"
+                title={`${pendingReceiptsCount} pending receipt${pendingReceiptsCount > 1 ? "s" : ""} to review`}
+              >
+                {pendingReceiptsCount}
+              </span>
+            )}
           </Link>
           <Link
             href="/dashboard/metricas"
