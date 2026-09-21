@@ -1,9 +1,10 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { Building2, Plus, Globe, CheckCircle, XCircle, ExternalLink } from "lucide-react"
+import { Building2, Plus, Globe, CheckCircle, XCircle, ExternalLink, Sparkles, Clock, ShieldAlert, CheckCircle2 } from "lucide-react"
 import { toast } from "sonner"
 import { getTenantUrl } from "@/lib/tenant-url"
+import { getSubscriptionState, SubscriptionState } from "@/lib/subscription"
 
 interface ComplexItem {
   id: string
@@ -16,6 +17,11 @@ interface ComplexItem {
   slug: string
   isActive?: boolean
   activo?: boolean
+  subscriptionStatus?: string | null
+  trialEndsAt?: string | null
+  trialDays?: number | null
+  gracePeriodDays?: number | null
+  createdAt?: string | null
   _count?: {
     courts?: number
     canchas?: number
@@ -104,6 +110,24 @@ export default function ComplejosAdminPage() {
     }
   }
 
+  const updateSubscription = async (complexId: string, payload: any, successMessage: string) => {
+    try {
+      const res = await fetch(`/api/admin/complejos/${complexId}/suscripcion`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      })
+      if (!res.ok) {
+        const data = await res.json()
+        throw new Error(data.error || "Failed to update subscription")
+      }
+      toast.success(successMessage)
+      fetchComplexes()
+    } catch (err: any) {
+      toast.error(err.message || "Could not update subscription")
+    }
+  }
+
   const getComplexName = (c: ComplexItem) => c.name || c.nombre || ""
   const getComplexAddress = (c: ComplexItem) => c.address || c.direccion || ""
   const getComplexPhone = (c: ComplexItem) => c.phone || c.telefono || ""
@@ -151,7 +175,8 @@ export default function ComplejosAdminPage() {
                   <th className="px-6 py-3.5">Subdomain / Slug</th>
                   <th className="px-6 py-3.5">Contact</th>
                   <th className="px-6 py-3.5">Metrics</th>
-                  <th className="px-6 py-3.5">Status</th>
+                  <th className="px-6 py-3.5">Subscription Plan</th>
+                  <th className="px-6 py-3.5">Public State</th>
                   <th className="px-6 py-3.5 text-right">Actions</th>
                 </tr>
               </thead>
@@ -182,6 +207,52 @@ export default function ComplejosAdminPage() {
                           <strong>{getCourtsCount(c)}</strong> courts · <strong>{getUsersCount(c)}</strong> staff · <strong>{getBookingsCount(c)}</strong> bookings
                         </span>
                       </td>
+                      {/* Subscription Status Column */}
+                      <td className="px-6 py-4">
+                        {(() => {
+                          const subState = getSubscriptionState({
+                            subscriptionStatus: c.subscriptionStatus,
+                            trialEndsAt: c.trialEndsAt,
+                            trialDays: c.trialDays,
+                            gracePeriodDays: c.gracePeriodDays,
+                            createdAt: c.createdAt,
+                          })
+
+                          if (subState.status === "ACTIVE") {
+                            return (
+                              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-400">
+                                <CheckCircle2 className="w-3.5 h-3.5" /> ACTIVE
+                              </span>
+                            )
+                          }
+                          if (subState.status === "TRIAL") {
+                            return (
+                              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-blue-100 text-blue-800 dark:bg-blue-950/60 dark:text-blue-400">
+                                <Sparkles className="w-3.5 h-3.5" /> TRIAL ({subState.daysLeftInTrial}d left)
+                              </span>
+                            )
+                          }
+                          if (subState.status === "GRACE") {
+                            return (
+                              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-400">
+                                <Clock className="w-3.5 h-3.5" /> GRACE ({subState.daysLeftInGrace}d left)
+                              </span>
+                            )
+                          }
+                          if (subState.status === "SUSPENDED") {
+                            return (
+                              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-red-100 text-red-800 dark:bg-red-950/60 dark:text-red-400">
+                                <ShieldAlert className="w-3.5 h-3.5" /> SUSPENDED (Read-Only)
+                              </span>
+                            )
+                          }
+                          return (
+                            <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400">
+                              INACTIVE
+                            </span>
+                          )
+                        })()}
+                      </td>
                       <td className="px-6 py-4">
                         <span
                           className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold ${
@@ -202,16 +273,57 @@ export default function ComplejosAdminPage() {
                         </span>
                       </td>
                       <td className="px-6 py-4 text-right">
-                        <button
-                          onClick={() => toggleStatus(c)}
-                          className={`text-xs px-3 py-1.5 rounded-lg font-semibold transition border ${
-                            active
-                              ? "border-red-200 text-red-600 hover:bg-red-50 dark:border-red-900/60"
-                              : "border-emerald-200 text-emerald-600 hover:bg-emerald-50 dark:border-emerald-900/60"
-                          }`}
-                        >
-                          {active ? "Deactivate" : "Reactivate"}
-                        </button>
+                        <div className="flex items-center justify-end gap-1.5 flex-wrap">
+                          {(() => {
+                            const subState = getSubscriptionState({
+                              subscriptionStatus: c.subscriptionStatus,
+                              trialEndsAt: c.trialEndsAt,
+                              trialDays: c.trialDays,
+                              gracePeriodDays: c.gracePeriodDays,
+                              createdAt: c.createdAt,
+                            })
+
+                            return (
+                              <>
+                                {subState.status !== "ACTIVE" && (
+                                  <button
+                                    onClick={() => updateSubscription(c.id, { status: "ACTIVE" }, "Suscripción activada")}
+                                    className="text-xs px-2 py-1 rounded bg-emerald-600 text-white font-semibold hover:bg-emerald-700 transition"
+                                    title="Marcar suscripción como activa (pagado)"
+                                  >
+                                    Activar
+                                  </button>
+                                )}
+                                <button
+                                  onClick={() => updateSubscription(c.id, { extendDays: 15 }, "15 días de prueba extendidos")}
+                                  className="text-xs px-2 py-1 rounded bg-purple-600 text-white font-semibold hover:bg-purple-700 transition"
+                                  title="Extender 15 días de prueba"
+                                >
+                                  +15d
+                                </button>
+                                {subState.status !== "SUSPENDED" && (
+                                  <button
+                                    onClick={() => updateSubscription(c.id, { status: "SUSPENDED" }, "Complejo suspendido")}
+                                    className="text-xs px-2 py-1 rounded border border-red-200 text-red-600 hover:bg-red-50 dark:border-red-900/60 font-semibold transition"
+                                    title="Suspender complejo a modo solo lectura"
+                                  >
+                                    Suspender
+                                  </button>
+                                )}
+                              </>
+                            )
+                          })()}
+                          <button
+                            onClick={() => toggleStatus(c)}
+                            className={`text-xs px-2 py-1 rounded font-semibold transition border ${
+                              active
+                                ? "border-zinc-200 text-zinc-600 hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-300"
+                                : "border-emerald-200 text-emerald-600 hover:bg-emerald-50 dark:border-emerald-900/60"
+                            }`}
+                          >
+                            {active ? "Pausar" : "Reactivar"}
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   )

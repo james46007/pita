@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { z } from "zod"
 import { getCurrentUserAndTenant, assertAdminOnly } from "@/lib/tenant"
 import { prisma } from "@/lib/prisma"
+import { assertSubscriptionWriteAccess, SubscriptionExpiredError } from "@/lib/subscription-guard"
 
 const courtSchema = z.object({
   name: z.string().min(2, "Court name must have at least 2 characters"),
@@ -44,6 +45,7 @@ export async function POST(req: Request) {
     const { complexId, role } = await getCurrentUserAndTenant(targetComplexId)
 
     assertAdminOnly(role)
+    await assertSubscriptionWriteAccess(complexId)
 
     const raw = await req.json()
     let typeVal = raw.type ?? raw.tipo
@@ -81,6 +83,16 @@ export async function POST(req: Request) {
   } catch (error: any) {
     if (error.message === "UNAUTHORIZED") return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     if (error.message === "FORBIDDEN_REQUIRES_ADMIN") return NextResponse.json({ error: "Action requires ADMIN role" }, { status: 403 })
+    if (error instanceof SubscriptionExpiredError) {
+      return NextResponse.json(
+        {
+          error: "SUBSCRIPTION_EXPIRED",
+          message: error.message,
+          subscription: error.subscriptionState,
+        },
+        { status: 402 }
+      )
+    }
     return NextResponse.json({ error: "Internal error creating court" }, { status: 500 })
   }
 }

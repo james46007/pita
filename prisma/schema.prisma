@@ -38,6 +38,14 @@ enum ComplexRole {
   STAFF
 }
 
+enum SubscriptionStatus {
+  TRIAL
+  GRACE
+  ACTIVE
+  SUSPENDED
+  INACTIVE
+}
+
 model Complex {
   id        String   @id @default(cuid())
   name      String
@@ -45,10 +53,14 @@ model Complex {
   address   String
   slug      String   @unique
   logoUrl   String?
-  isActive          Boolean  @default(true)
-  paymentTimeoutMin Int      @default(15) // Minutes allowed to upload payment receipt before slot is released
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
+  isActive          Boolean            @default(true)
+  paymentTimeoutMin Int                @default(15) // Minutes allowed to upload payment receipt before slot is released
+  subscriptionStatus SubscriptionStatus @default(TRIAL)
+  trialDays          Int                @default(30)
+  gracePeriodDays    Int                @default(5)
+  trialEndsAt        DateTime?
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
 
   courts       Court[]
   bankAccounts BankAccount[]

@@ -80,6 +80,9 @@ export async function POST(req: Request) {
       )
     }
 
+    const trialDays = 30
+    const trialEndsAt = new Date(Date.now() + trialDays * 24 * 60 * 60 * 1000)
+
     const complex = await prisma.complex.create({
       data: {
         name,
@@ -87,6 +90,10 @@ export async function POST(req: Request) {
         address,
         slug,
         logoUrl,
+        subscriptionStatus: "TRIAL",
+        trialDays,
+        gracePeriodDays: 5,
+        trialEndsAt,
       },
     })
 

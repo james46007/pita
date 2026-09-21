@@ -3,6 +3,7 @@ import { z } from "zod"
 import { BookingStatus, SlotStatus } from "@prisma/client"
 import { getCurrentUserAndTenant } from "@/lib/tenant"
 import { prisma } from "@/lib/prisma"
+import { assertSubscriptionWriteAccess, SubscriptionExpiredError } from "@/lib/subscription-guard"
 
 const manualBookingSchema = z.object({
   slotId: z.string().min(1, "slotId is required"),
@@ -18,6 +19,9 @@ export async function POST(req: Request) {
     const { searchParams } = new URL(req.url)
     const targetComplexId = searchParams.get("complexId") || searchParams.get("complejoId") || undefined
     const { complexId, role } = await getCurrentUserAndTenant(targetComplexId)
+
+    // Soft-lock subscription guard: ensure complex is authorized for write operations
+    await assertSubscriptionWriteAccess(complexId)
 
     const raw = await req.json()
     const body = {
@@ -123,6 +127,17 @@ export async function POST(req: Request) {
     }
     if (error.message === "FORBIDDEN_TENANT_ACCESS") {
       return NextResponse.json({ error: "Forbidden: Access denied to complex" }, { status: 403 })
+    }
+
+    if (error instanceof SubscriptionExpiredError) {
+      return NextResponse.json(
+        {
+          error: "SUBSCRIPTION_EXPIRED",
+          message: error.message,
+          subscription: error.subscriptionState,
+        },
+        { status: 402 }
+      )
     }
 
     console.error("Error creating manual booking:", error)

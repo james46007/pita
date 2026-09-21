@@ -4,6 +4,8 @@ import Link from "next/link"
 import { authOptionsAdmin } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
 import { LayoutDashboard, Calendar, Trophy, Clock, Settings, LogOut, ShieldAlert, BarChart3 } from "lucide-react"
+import { getSubscriptionState, SubscriptionState } from "@/lib/subscription"
+import { SubscriptionBanner } from "@/components/dashboard/SubscriptionBanner"
 
 export default async function DashboardLayout({
   children,
@@ -35,13 +37,33 @@ export default async function DashboardLayout({
   }
 
   let pendingReceiptsCount = 0
+  let subscriptionState: SubscriptionState | null = null
+
   if (firstComplexId) {
-    pendingReceiptsCount = await prisma.booking.count({
-      where: {
-        complexId: firstComplexId,
-        status: "RECEIPT_UPLOADED",
-      },
-    })
+    const [receipts, complexData] = await Promise.all([
+      prisma.booking.count({
+        where: {
+          complexId: firstComplexId,
+          status: "RECEIPT_UPLOADED",
+        },
+      }),
+      prisma.complex.findUnique({
+        where: { id: firstComplexId },
+        select: {
+          subscriptionStatus: true,
+          trialEndsAt: true,
+          trialDays: true,
+          gracePeriodDays: true,
+          createdAt: true,
+          isActive: true,
+        },
+      }),
+    ])
+
+    pendingReceiptsCount = receipts
+    if (complexData) {
+      subscriptionState = getSubscriptionState(complexData)
+    }
   }
 
   return (
@@ -151,6 +173,8 @@ export default async function DashboardLayout({
             </span>
           </div>
         </header>
+
+        <SubscriptionBanner subscription={subscriptionState} isSuperAdmin={user.isSuperAdmin} />
 
         <main className="flex-1 p-6 overflow-y-auto">{children}</main>
       </div>
