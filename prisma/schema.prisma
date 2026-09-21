@@ -139,6 +139,7 @@ model Booking {
   totalAmount   Decimal       @db.Decimal(10, 2)
   notes         String?
   expiresAt     DateTime?     // Expiration deadline for payment receipt upload
+  reminderSentAt DateTime?    // Timestamp when the 1h-prior reminder email was dispatched
   createdAt     DateTime      @default(now())
   updatedAt     DateTime      @updatedAt
 
