@@ -51,7 +51,7 @@ export class EvolutionApiClient {
    */
   public static async createInstance(instanceName: string): Promise<{ success: boolean; error?: string }> {
     const { baseUrl } = getApiConfig()
-    const appUrl = (process.env.NEXTAUTH_URL || "https://pita.app").replace(/\/$/, "")
+    const appUrl = (process.env.NEXTAUTH_URL || "https://pitaapp.vercel.app").replace(/\/$/, "")
     const webhookUrl = `${appUrl}/api/webhooks/whatsapp`
 
     try {
@@ -62,13 +62,10 @@ export class EvolutionApiClient {
           instanceName,
           qrcode: true,
           integration: "WHATSAPP-BAILEYS",
-          webhook: webhookUrl,
-          webhook_by_events: false,
-          events: ["CONNECTION_UPDATE"],
         }),
       })
 
-      // Also ensure webhook is explicitly set for the instance
+      // Set webhook configuration via dedicated endpoint
       fetch(`${baseUrl}/webhook/set/${instanceName}`, {
         method: "POST",
         headers: this.getHeaders(),
