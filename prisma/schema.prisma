@@ -66,6 +66,8 @@ model Complex {
   bankAccounts BankAccount[]
   users        UserComplex[]
   bookings     Booking[]
+  whatsappConfig   ComplexWhatsappConfig?
+  whatsappMessages WhatsappOutboundMessage[]
 }
 
 model BankAccount {
@@ -147,6 +149,7 @@ model Booking {
   court         Court         @relation(fields: [courtId], references: [id], onDelete: Restrict)
   complex       Complex       @relation(fields: [complexId], references: [id], onDelete: Restrict)
   customer      Customer?     @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  whatsappMessage WhatsappOutboundMessage?
 }
 
 model Customer {
@@ -183,3 +186,54 @@ model UserComplex {
 
   @@unique([userId, complexId])
 }
+
+enum WhatsappStatus {
+  DISCONNECTED
+  CONNECTING
+  CONNECTED
+}
+
+enum WhatsappMessageStatus {
+  PENDING
+  SENT
+  FAILED_PERMANENT
+  EXPIRED
+}
+
+model ComplexWhatsappConfig {
+  id             String         @id @default(cuid())
+  complexId      String         @unique
+  instanceName   String         @unique
+  instanceApiKey String?
+  status         WhatsappStatus @default(DISCONNECTED)
+  phoneNumber    String?
+  profileName    String?
+  customMessage  String?
+  isActive       Boolean        @default(true)
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+  complex        Complex        @relation(fields: [complexId], references: [id], onDelete: Cascade)
+}
+
+model WhatsappOutboundMessage {
+  id          String                @id @default(cuid())
+  complexId   String
+  bookingId   String                @unique
+  toPhone     String
+  messageBody String
+  status      WhatsappMessageStatus @default(PENDING)
+  attempts    Int                   @default(0)
+  lastError   String?
+  nextRetryAt DateTime              @default(now())
+  sentAt      DateTime?
+  createdAt   DateTime              @default(now())
+  updatedAt   DateTime              @updatedAt
+
+  complex     Complex               @relation(fields: [complexId], references: [id], onDelete: Cascade)
+  booking     Booking               @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+
+  @@index([status, nextRetryAt])
+  @@index([complexId])
+}
+

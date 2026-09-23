@@ -4,6 +4,8 @@ import { getCurrentUserAndTenant } from "@/lib/tenant"
 import { prisma } from "@/lib/prisma"
 import { sendEmail } from "@/lib/email/resend"
 import { renderBookingConfirmedEmail } from "@/lib/email/templates/booking-confirmed"
+import { normalizePhoneToE164 } from "@/lib/whatsapp/phone"
+import { renderBookingConfirmationWhatsApp } from "@/lib/whatsapp/templates"
 
 const patchBookingSchema = z.object({
   status: z.enum(["CONFIRMED", "CANCELLED"]),
@@ -38,7 +40,11 @@ export async function PATCH(
       include: {
         slot: true,
         court: true,
-        complex: true,
+        complex: {
+          include: {
+            whatsappConfig: true,
+          },
+        },
       },
     })
 
@@ -100,6 +106,60 @@ export async function PATCH(
         })
       } catch (err) {
         console.error("[PREPARE_EMAIL_ERROR]", err)
+      }
+    }
+
+    // 3. Asynchronously enqueue WhatsApp confirmation message
+    if (status === "CONFIRMED" && booking.customerPhone) {
+      try {
+        const phoneValidation = normalizePhoneToE164(booking.customerPhone)
+        const slotDate = booking.slot.date
+          ? new Date(booking.slot.date).toLocaleDateString("es-ES", {
+              weekday: "long",
+              day: "numeric",
+              month: "long",
+            })
+          : "Fecha reservada"
+
+        const whatsappBody = renderBookingConfirmationWhatsApp(
+          {
+            customerName: booking.customerName,
+            complexName: booking.complex.name,
+            complexAddress: booking.complex.address,
+            courtName: booking.court.name,
+            date: slotDate,
+            startTime: booking.slot.startTime,
+            endTime: booking.slot.endTime,
+            totalAmount: Number(booking.totalAmount),
+            bookingId: booking.id,
+          },
+          booking.complex.whatsappConfig?.customMessage
+        )
+
+        // Human-like staggered delay between 3 and 8 seconds
+        const delaySeconds = Math.floor(Math.random() * 6) + 3
+        const nextRetryAt = new Date(Date.now() + delaySeconds * 1000)
+
+        // Idempotent upsert: prevent duplicate message records for the same booking
+        prisma.whatsappOutboundMessage
+          .upsert({
+            where: { bookingId: booking.id },
+            create: {
+              complexId: booking.complexId,
+              bookingId: booking.id,
+              toPhone: phoneValidation.formattedPhone,
+              messageBody: whatsappBody,
+              status: phoneValidation.isValid ? "PENDING" : "FAILED_PERMANENT",
+              lastError: phoneValidation.isValid ? null : phoneValidation.error,
+              nextRetryAt,
+            },
+            update: {},
+          })
+          .catch((err) => {
+            console.error("[ENQUEUE_WHATSAPP_ERROR]", err)
+          })
+      } catch (err) {
+        console.error("[PREPARE_WHATSAPP_ERROR]", err)
       }
     }
 

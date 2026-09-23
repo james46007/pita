@@ -3,7 +3,7 @@ import { getServerSession } from "next-auth"
 import Link from "next/link"
 import { authOptionsAdmin } from "@/lib/auth"
 import { prisma } from "@/lib/prisma"
-import { LayoutDashboard, Calendar, Trophy, Clock, Settings, LogOut, ShieldAlert, BarChart3 } from "lucide-react"
+import { LayoutDashboard, Calendar, Trophy, Clock, Settings, LogOut, ShieldAlert, BarChart3, MessageCircle } from "lucide-react"
 import { getSubscriptionState, SubscriptionState } from "@/lib/subscription"
 import { SubscriptionBanner } from "@/components/dashboard/SubscriptionBanner"
 import { PwaInstallPrompt } from "@/components/pwa/PwaInstallPrompt"
@@ -159,6 +159,13 @@ export default async function DashboardLayout({
           >
             <Settings className="h-4 w-4 text-emerald-600" />
             Bank Accounts
+          </Link>
+          <Link
+            href="/dashboard/whatsapp"
+            className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-zinc-700 hover:bg-emerald-50 hover:text-emerald-600 dark:text-zinc-300 dark:hover:bg-zinc-800"
+          >
+            <MessageCircle className="h-4 w-4 text-emerald-600" />
+            WhatsApp
           </Link>
 
           {user.isSuperAdmin && (
