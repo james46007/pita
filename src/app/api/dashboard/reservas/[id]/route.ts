@@ -6,6 +6,7 @@ import { sendEmail } from "@/lib/email/resend"
 import { renderBookingConfirmedEmail } from "@/lib/email/templates/booking-confirmed"
 import { normalizePhoneToE164 } from "@/lib/whatsapp/phone"
 import { renderBookingConfirmationWhatsApp } from "@/lib/whatsapp/templates"
+import { EvolutionApiClient } from "@/lib/whatsapp/evolution"
 
 const patchBookingSchema = z.object({
   status: z.enum(["CONFIRMED", "CANCELLED"]),
@@ -154,6 +155,35 @@ export async function PATCH(
               nextRetryAt,
             },
             update: {},
+          })
+          .then(async (outbound) => {
+            // Immediate dispatch if instance is actively CONNECTED
+            if (
+              phoneValidation.isValid &&
+              booking.complex.whatsappConfig?.status === "CONNECTED" &&
+              booking.complex.whatsappConfig.isActive
+            ) {
+              try {
+                const sendRes = await EvolutionApiClient.sendTextMessage(
+                  booking.complex.whatsappConfig.instanceName,
+                  phoneValidation.formattedPhone,
+                  whatsappBody
+                )
+                if (sendRes.success) {
+                  await prisma.whatsappOutboundMessage.update({
+                    where: { id: outbound.id },
+                    data: { status: "SENT", sentAt: new Date(), lastError: null },
+                  })
+                } else {
+                  await prisma.whatsappOutboundMessage.update({
+                    where: { id: outbound.id },
+                    data: { lastError: sendRes.error },
+                  })
+                }
+              } catch (sendErr: any) {
+                console.error("[IMMEDIATE_WHATSAPP_SEND_ERROR]", sendErr)
+              }
+            }
           })
           .catch((err) => {
             console.error("[ENQUEUE_WHATSAPP_ERROR]", err)
