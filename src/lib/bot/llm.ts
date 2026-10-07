@@ -36,9 +36,7 @@ Reglas:
 async function callGemini(contents: GeminiContent[], system: string): Promise<GeminiContent> {
   const apiKey = process.env.GEMINI_API_KEY
   if (!apiKey) throw new Error("GEMINI_API_KEY no configurada")
-  const rawModel = process.env.GEMINI_MODEL || "gemini-1.5-flash"
-  // Fallback to valid Google model if an invalid version like 2.5 was configured
-  const model = rawModel.includes("2.5") ? "gemini-1.5-flash" : rawModel
+  const model = process.env.GEMINI_MODEL || "gemini-2.5-flash"
 
   const res = await fetch(
     `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
