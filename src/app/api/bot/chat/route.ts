@@ -162,8 +162,13 @@ export async function POST(req: Request) {
       })
     } catch (err) {
       console.error("[BOT_CHAT_LLM_ERROR]", err)
-      return NextResponse.json({ shouldReply: false, replyText: null, interactive: null })
+      return NextResponse.json({
+        shouldReply: true,
+        replyText: "Disculpa, tuvimos un inconveniente técnico temporal con nuestro servicio de reservas. Por favor intenta nuevamente o escribe *menu*.",
+        interactive: null,
+      })
     }
+
 
     if (!result.shouldReply || !result.replyText) {
       // Mensaje ajeno a reservas: silencio total para no interferir
@@ -181,5 +186,45 @@ export async function POST(req: Request) {
     console.error("[BOT_CHAT_ERROR]", error)
     return NextResponse.json({ error: "Internal Server Error" }, { status: 500 })
   }
+}
+
+// GET /api/bot/chat - Diagnóstico de configuración
+export async function GET(req: Request) {
+
+  const { searchParams } = new URL(req.url)
+  const testGemini = searchParams.get("test") === "true"
+  const apiKey = process.env.GEMINI_API_KEY
+  const rawModel = process.env.GEMINI_MODEL || "gemini-1.5-flash"
+  const model = rawModel.includes("2.5") ? "gemini-1.5-flash" : rawModel
+
+  const status = {
+    status: "ok",
+    geminiKeyConfigured: !!apiKey,
+    geminiKeyLength: apiKey ? apiKey.length : 0,
+    geminiModel: model,
+    botTimezone: process.env.BOT_TIMEZONE || "America/Guayaquil",
+    botSecretConfigured: !!process.env.PITA_BOT_SECRET_KEY,
+  }
+
+  if (testGemini && apiKey) {
+    try {
+      const res = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "x-goog-api-key": apiKey },
+          body: JSON.stringify({
+            contents: [{ role: "user", parts: [{ text: "Responde solo con la palabra: OK" }] }],
+          }),
+        }
+      )
+      const data = await res.json()
+      return NextResponse.json({ ...status, geminiPingOk: res.ok, geminiData: data })
+    } catch (e: any) {
+      return NextResponse.json({ ...status, geminiPingOk: false, error: e.message })
+    }
+  }
+
+  return NextResponse.json(status)
 }
 
