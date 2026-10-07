@@ -206,6 +206,17 @@ export async function GET(req: Request) {
     botSecretConfigured: !!process.env.PITA_BOT_SECRET_KEY,
   }
 
+  if (searchParams.get("listModels") === "true" && apiKey) {
+    try {
+      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`)
+      const data = await res.json()
+      const names = (data.models || []).map((m: any) => m.name.replace("models/", ""))
+      return NextResponse.json({ ...status, availableModels: names })
+    } catch (e: any) {
+      return NextResponse.json({ ...status, error: e.message })
+    }
+  }
+
   if (testGemini && apiKey) {
     try {
       const res = await fetch(
@@ -227,4 +238,5 @@ export async function GET(req: Request) {
 
   return NextResponse.json(status)
 }
+
 
