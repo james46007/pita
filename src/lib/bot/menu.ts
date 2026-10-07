@@ -62,14 +62,14 @@ export type MenuResolution =
   | { kind: "intent"; text: string }
   | { kind: "none" }
 
-const GREETING_RE = /^(hola|holi|buenas|buenos dias|buenos días|buenas tardes|buenas noches|menu|menú|inicio|opciones|servicios)\W*$/i
+const MENU_EXPLICIT_RE = /^(menu|menú|inicio|opciones|servicios)\W*$/i
 
 export function resolveMenuInput(text: string, listRowId?: string | null): MenuResolution {
   let rowId = listRowId || ""
 
   if (!rowId) {
     const t = text.trim()
-    if (GREETING_RE.test(t)) return { kind: "menu" }
+    if (MENU_EXPLICIT_RE.test(t)) return { kind: "menu" }
     const n = /^([1-4])[.)]?$/.exec(t)
     if (n) rowId = MENU_ROWS[Number(n[1]) - 1].rowId
   }
@@ -80,4 +80,5 @@ export function resolveMenuInput(text: string, listRowId?: string | null): MenuR
   if (ROW_INTENT[rowId]) return { kind: "intent", text: ROW_INTENT[rowId] }
   return { kind: "none" }
 }
+
 

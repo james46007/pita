@@ -88,7 +88,7 @@ export async function POST(req: Request) {
       const menu = buildMenu(complex.name, customerName)
       await save("USER", text, [{ text }])
       await save("MODEL", menu.replyText, [{ text: menu.replyText }])
-      return NextResponse.json({ replyText: menu.replyText, interactive: menu.interactive })
+      return NextResponse.json({ shouldReply: true, replyText: menu.replyText, interactive: menu.interactive })
     }
 
     if (menuInput.kind === "cuentas") {
@@ -111,7 +111,7 @@ export async function POST(req: Request) {
       }
       await save("USER", text || "[cuentas bancarias]", [{ text: text || "Cuentas bancarias" }])
       await save("MODEL", reply, [{ text: reply }])
-      return NextResponse.json({ replyText: reply, interactive: null })
+      return NextResponse.json({ shouldReply: true, replyText: reply, interactive: null })
     }
 
     if (menuInput.kind === "info") {
@@ -122,7 +122,7 @@ export async function POST(req: Request) {
         `Si necesitas asistencia de nuestro personal o consultar por torneos/eventos, te atenderemos en ese número.`
       await save("USER", text || "[ubicacion y contacto]", [{ text: text || "Ubicación y contacto" }])
       await save("MODEL", reply, [{ text: reply }])
-      return NextResponse.json({ replyText: reply, interactive: null })
+      return NextResponse.json({ shouldReply: true, replyText: reply, interactive: null })
     }
 
     if (isImage) {
@@ -130,12 +130,11 @@ export async function POST(req: Request) {
       const reply = `¡Gracias ${customerName}! 📄 Recibimos tu archivo. Si es tu comprobante de pago, nuestro equipo lo verificará y te confirmará la reserva.`
       await save("USER", "[imagen]", [{ text: "[El cliente envió una imagen/comprobante]" }])
       await save("MODEL", reply, [{ text: reply }])
-      return NextResponse.json({ replyText: reply, interactive: null })
+      return NextResponse.json({ shouldReply: true, replyText: reply, interactive: null })
     }
 
     if (!text && menuInput.kind === "none") {
-      const menu = buildMenu(complex.name, customerName)
-      return NextResponse.json({ replyText: menu.replyText, interactive: menu.interactive })
+      return NextResponse.json({ shouldReply: false, replyText: null, interactive: null })
     }
 
     // ---- LLM path with persisted memory ----
@@ -163,8 +162,12 @@ export async function POST(req: Request) {
       })
     } catch (err) {
       console.error("[BOT_CHAT_LLM_ERROR]", err)
-      const reply = "Disculpa, tuve un problema técnico. Escribe *menu* para ver las opciones o inténtalo de nuevo en un momento."
-      return NextResponse.json({ replyText: reply, interactive: null })
+      return NextResponse.json({ shouldReply: false, replyText: null, interactive: null })
+    }
+
+    if (!result.shouldReply || !result.replyText) {
+      // Mensaje ajeno a reservas: silencio total para no interferir
+      return NextResponse.json({ shouldReply: false, replyText: null, interactive: null })
     }
 
     // Persist every turn (including tool calls) so the model remembers slot IDs, bookings, etc.
@@ -173,9 +176,10 @@ export async function POST(req: Request) {
       await save(turn.role === "user" ? "USER" : "MODEL", plain, turn.parts)
     }
 
-    return NextResponse.json({ replyText: result.replyText, interactive: null })
+    return NextResponse.json({ shouldReply: true, replyText: result.replyText, interactive: null })
   } catch (error) {
     console.error("[BOT_CHAT_ERROR]", error)
     return NextResponse.json({ error: "Internal Server Error" }, { status: 500 })
   }
 }
+
