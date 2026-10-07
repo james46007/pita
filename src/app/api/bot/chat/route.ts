@@ -160,14 +160,16 @@ export async function POST(req: Request) {
         complexName: complex.name,
         ctx: { complexId: complex.id, customerPhone: phone, customerName },
       })
-    } catch (err) {
+    } catch (err: any) {
       console.error("[BOT_CHAT_LLM_ERROR]", err)
       return NextResponse.json({
         shouldReply: true,
         replyText: "Disculpa, tuvimos un inconveniente técnico temporal con nuestro servicio de reservas. Por favor intenta nuevamente o escribe *menu*.",
         interactive: null,
+        errorDetail: err?.message || String(err),
       })
     }
+
 
 
     if (!result.shouldReply || !result.replyText) {
