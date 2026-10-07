@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma"
 import { assertBotAuthorized } from "@/lib/bot-auth"
 import { buildMenu, resolveMenuInput } from "@/lib/bot/menu"
 import { runAgent, type GeminiContent } from "@/lib/bot/llm"
+import { processCustomerReceipt } from "@/lib/bot/receipt"
 
 const HISTORY_LIMIT = 30
 const MEMORY_TTL_MS = 12 * 60 * 60 * 1000 // conversation context expires after 12h of inactivity
@@ -15,7 +16,10 @@ const chatSchema = z.object({
   text: z.string().optional().default(""),
   listRowId: z.string().optional().nullable(),
   isImage: z.boolean().optional().default(false),
+  messageId: z.string().optional().nullable(),
+  mediaBase64: z.string().optional().nullable(),
 })
+
 
 const isPlainUserText = (c: GeminiContent) =>
   c.role === "user" && c.parts.some((p) => typeof p.text === "string") && !c.parts.some((p) => p.functionResponse)
@@ -126,16 +130,24 @@ export async function POST(req: Request) {
     }
 
     if (isImage) {
-      // TODO: download media from Evolution and forward to /api/bot/comprobante.
-      const reply = `¡Gracias ${customerName}! 📄 Recibimos tu archivo. Si es tu comprobante de pago, nuestro equipo lo verificará y te confirmará la reserva.`
-      await save("USER", "[imagen]", [{ text: "[El cliente envió una imagen/comprobante]" }])
-      await save("MODEL", reply, [{ text: reply }])
-      return NextResponse.json({ shouldReply: true, replyText: reply, interactive: null })
+      const receiptResult = await processCustomerReceipt({
+        complexId: complex.id,
+        customerPhone: phone,
+        customerName,
+        instanceName: instance,
+        messageId: parsed.data.messageId,
+        mediaBase64: parsed.data.mediaBase64,
+      })
+
+      await save("USER", "[comprobante de pago]", [{ text: "[El cliente envió un comprobante de pago]" }])
+      await save("MODEL", receiptResult.replyText, [{ text: receiptResult.replyText }])
+      return NextResponse.json({ shouldReply: true, replyText: receiptResult.replyText, interactive: null })
     }
 
     if (!text && menuInput.kind === "none") {
       return NextResponse.json({ shouldReply: false, replyText: null, interactive: null })
     }
+
 
     // ---- LLM path with persisted memory ----
     const userText = menuInput.kind === "intent" ? menuInput.text : text
