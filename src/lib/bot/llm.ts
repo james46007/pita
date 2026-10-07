@@ -36,7 +36,8 @@ Reglas:
 async function callGemini(contents: GeminiContent[], system: string): Promise<GeminiContent> {
   const apiKey = process.env.GEMINI_API_KEY
   if (!apiKey) throw new Error("GEMINI_API_KEY no configurada")
-  const model = process.env.GEMINI_MODEL || "gemini-3.8-flash"
+  const envModel = process.env.GEMINI_MODEL
+  const model = (!envModel || envModel.includes("2.5") || envModel.includes("1.5")) ? "gemini-3.8-flash" : envModel
 
   const res = await fetch(
     `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,

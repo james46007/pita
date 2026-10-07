@@ -194,7 +194,8 @@ export async function GET(req: Request) {
   const { searchParams } = new URL(req.url)
   const testGemini = searchParams.get("test") === "true"
   const apiKey = process.env.GEMINI_API_KEY
-  const model = process.env.GEMINI_MODEL || "gemini-3.8-flash"
+  const envModel = process.env.GEMINI_MODEL
+  const model = (!envModel || envModel.includes("2.5") || envModel.includes("1.5")) ? "gemini-3.8-flash" : envModel
 
   const status = {
     status: "ok",
