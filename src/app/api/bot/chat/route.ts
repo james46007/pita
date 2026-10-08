@@ -232,23 +232,30 @@ export async function GET(req: Request) {
   }
 
   if (testGemini && apiKey) {
-    try {
-      const res = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json", "x-goog-api-key": apiKey },
-          body: JSON.stringify({
-            contents: [{ role: "user", parts: [{ text: "Responde solo con la palabra: OK" }] }],
-          }),
+    const candidates = [model, "gemini-flash-latest", "gemini-2.5-pro", "gemini-pro-latest"]
+    for (const m of candidates) {
+      try {
+        const res = await fetch(
+          `https://generativelanguage.googleapis.com/v1beta/models/${m}:generateContent`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json", "x-goog-api-key": apiKey },
+            body: JSON.stringify({
+              contents: [{ role: "user", parts: [{ text: "Responde solo con la palabra: OK" }] }],
+            }),
+          }
+        )
+        const data = await res.json()
+        if (res.ok) {
+          return NextResponse.json({ ...status, testedModel: m, geminiPingOk: true, geminiData: data })
         }
-      )
-      const data = await res.json()
-      return NextResponse.json({ ...status, geminiPingOk: res.ok, geminiData: data })
-    } catch (e: any) {
-      return NextResponse.json({ ...status, geminiPingOk: false, error: e.message })
+      } catch (e: any) {
+        // continue
+      }
     }
+    return NextResponse.json({ ...status, geminiPingOk: false, error: "All candidate models failed" })
   }
+
 
   return NextResponse.json(status)
 }
