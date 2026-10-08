@@ -233,6 +233,7 @@ export async function GET(req: Request) {
 
   if (testGemini && apiKey) {
     const candidates = [model, "gemini-flash-latest", "gemini-2.5-pro", "gemini-pro-latest"]
+    const candidateErrors: Record<string, any> = {}
     for (const m of candidates) {
       try {
         const res = await fetch(
@@ -249,12 +250,14 @@ export async function GET(req: Request) {
         if (res.ok) {
           return NextResponse.json({ ...status, testedModel: m, geminiPingOk: true, geminiData: data })
         }
+        candidateErrors[m] = { status: res.status, error: data?.error?.message || data }
       } catch (e: any) {
-        // continue
+        candidateErrors[m] = { error: e.message }
       }
     }
-    return NextResponse.json({ ...status, geminiPingOk: false, error: "All candidate models failed" })
+    return NextResponse.json({ ...status, geminiPingOk: false, candidateErrors })
   }
+
 
 
   return NextResponse.json(status)
