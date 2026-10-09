@@ -34,10 +34,9 @@ Reglas:
 }
 
 const CANDIDATE_MODELS = [
-  "gemini-3.8-flash",
-  "gemini-flash-latest",
-  "gemini-2.5-pro",
-  "gemini-pro-latest",
+  "gemini-1.5-flash",
+  "gemini-2.0-flash",
+  "gemini-1.5-pro",
 ]
 
 async function callGemini(contents: GeminiContent[], system: string): Promise<GeminiContent> {
@@ -45,10 +44,13 @@ async function callGemini(contents: GeminiContent[], system: string): Promise<Ge
   if (!apiKey) throw new Error("GEMINI_API_KEY no configurada")
 
   const configured = process.env.GEMINI_MODEL
-  const modelsToTry = [
-    ...(configured && !configured.includes("2.5-flash") && !configured.includes("1.5-flash") ? [configured] : []),
-    ...CANDIDATE_MODELS,
-  ]
+  const isValidConfigured = configured && !configured.includes("3.8") && !configured.includes("2.5-pro")
+  const modelsToTry = Array.from(
+    new Set([
+      ...(isValidConfigured ? [configured] : []),
+      ...CANDIDATE_MODELS,
+    ])
+  )
 
   let lastError: Error | null = null
 

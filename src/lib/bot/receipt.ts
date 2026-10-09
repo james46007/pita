@@ -72,13 +72,15 @@ export async function processCustomerReceipt(
 ): Promise<ProcessReceiptResult> {
   const { complexId, customerPhone, customerName, instanceName, messageId, mediaBase64 } = params
 
-  const cleanPhoneTail = customerPhone.replace(/\D/g, "").slice(-8)
+  const digitsOnly = customerPhone.replace(/\D/g, "")
+  const tail9 = digitsOnly.slice(-9)
+  const tail8 = digitsOnly.slice(-8)
 
   // 1. Buscar la reserva más reciente pendiente de pago para este teléfono y complejo
-  const booking = await prisma.booking.findFirst({
+  let booking = await prisma.booking.findFirst({
     where: {
       complexId,
-      customerPhone: { contains: cleanPhoneTail },
+      customerPhone: { contains: tail9 || tail8 },
       status: "PAYMENT_PENDING",
     },
     include: {
@@ -87,6 +89,21 @@ export async function processCustomerReceipt(
     },
     orderBy: { createdAt: "desc" },
   })
+
+  if (!booking && tail8 !== tail9) {
+    booking = await prisma.booking.findFirst({
+      where: {
+        complexId,
+        customerPhone: { contains: tail8 },
+        status: "PAYMENT_PENDING",
+      },
+      include: {
+        court: { select: { name: true } },
+        slot: { select: { startTime: true, date: true } },
+      },
+      orderBy: { createdAt: "desc" },
+    })
+  }
 
   if (!booking) {
     return {

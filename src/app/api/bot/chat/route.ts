@@ -232,7 +232,7 @@ export async function GET(req: Request) {
   }
 
   if (testGemini && apiKey) {
-    const candidates = [model, "gemini-flash-latest", "gemini-2.5-pro", "gemini-pro-latest"]
+    const candidates = ["gemini-1.5-flash", "gemini-2.0-flash", "gemini-1.5-pro"]
     const candidateErrors: Record<string, any> = {}
     for (const m of candidates) {
       try {
