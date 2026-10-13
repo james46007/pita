@@ -33,6 +33,10 @@ function trimHistory(history: GeminiContent[]): GeminiContent[] {
 
 export const maxDuration = 60
 
+// Deduplication cache for incoming message IDs (prevents double execution from webhook retries)
+const processedMessages = new Map<string, { timestamp: number }>()
+const DEDUP_TTL_MS = 45 * 1000 // 45 seconds
+
 // POST /api/bot/chat
 export async function POST(req: Request) {
   if (!assertBotAuthorized(req)) {
@@ -43,10 +47,24 @@ export async function POST(req: Request) {
   if (!parsed.success) {
     return NextResponse.json({ error: "Invalid data", issues: parsed.error.flatten() }, { status: 400 })
   }
-  const { instance, listRowId, isImage } = parsed.data
+  const { instance, listRowId, isImage, messageId } = parsed.data
   const text = parsed.data.text.trim()
   const phone = parsed.data.phone.replace(/\D/g, "")
   const customerName = (parsed.data.pushName || "Jugador").slice(0, 60)
+
+  // Deduplicación: si el mismo messageId llega duplicado en 45 segundos, silenciarlo
+  if (messageId) {
+    const now = Date.now()
+    for (const [id, item] of processedMessages) {
+      if (now - item.timestamp > DEDUP_TTL_MS) processedMessages.delete(id)
+    }
+
+    if (processedMessages.has(messageId)) {
+      console.warn(`[BOT_DEDUP] Duplicate message detected, silencing: ${messageId}`)
+      return NextResponse.json({ shouldReply: false, replyText: null, interactive: null })
+    }
+    processedMessages.set(messageId, { timestamp: now })
+  }
 
   try {
     const config = await prisma.complexWhatsappConfig.findUnique({
