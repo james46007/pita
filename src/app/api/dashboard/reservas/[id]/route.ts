@@ -5,7 +5,7 @@ import { prisma } from "@/lib/prisma"
 import { sendEmail } from "@/lib/email/resend"
 import { renderBookingConfirmedEmail } from "@/lib/email/templates/booking-confirmed"
 import { normalizePhoneToE164 } from "@/lib/whatsapp/phone"
-import { renderBookingConfirmationWhatsApp } from "@/lib/whatsapp/templates"
+import { renderBookingConfirmationWhatsApp, renderBookingCancellationWhatsApp, type BookingTemplateVariables } from "@/lib/whatsapp/templates"
 import { EvolutionApiClient } from "@/lib/whatsapp/evolution"
 
 const patchBookingSchema = z.object({
@@ -110,11 +110,11 @@ export async function PATCH(
       }
     }
 
-    // 3. Asynchronously enqueue WhatsApp confirmation message
-    if (status === "CONFIRMED" && booking.customerPhone) {
+    // 3. Asynchronously enqueue and dispatch WhatsApp confirmation or cancellation message
+    if ((status === "CONFIRMED" || status === "CANCELLED") && booking.customerPhone) {
       try {
         const phoneValidation = normalizePhoneToE164(booking.customerPhone)
-        const slotDate = booking.slot.date
+        const slotDate = booking.slot?.date
           ? new Date(booking.slot.date).toLocaleDateString("es-ES", {
               weekday: "long",
               day: "numeric",
@@ -122,26 +122,26 @@ export async function PATCH(
             })
           : "Fecha reservada"
 
-        const whatsappBody = renderBookingConfirmationWhatsApp(
-          {
-            customerName: booking.customerName,
-            complexName: booking.complex.name,
-            complexAddress: booking.complex.address,
-            courtName: booking.court.name,
-            date: slotDate,
-            startTime: booking.slot.startTime,
-            endTime: booking.slot.endTime,
-            totalAmount: Number(booking.totalAmount),
-            bookingId: booking.id,
-          },
-          booking.complex.whatsappConfig?.customMessage
-        )
+        const vars: BookingTemplateVariables = {
+          customerName: booking.customerName,
+          complexName: booking.complex.name,
+          complexAddress: booking.complex.address || "Consultar con recepción",
+          courtName: booking.court?.name || "Cancha",
+          date: slotDate,
+          startTime: booking.slot?.startTime || "",
+          endTime: booking.slot?.endTime || "",
+          totalAmount: Number(booking.totalAmount),
+          bookingId: booking.id,
+        }
 
-        // Human-like staggered delay between 3 and 8 seconds
-        const delaySeconds = Math.floor(Math.random() * 6) + 3
+        const whatsappBody = status === "CONFIRMED"
+          ? renderBookingConfirmationWhatsApp(vars, booking.complex.whatsappConfig?.customMessage)
+          : renderBookingCancellationWhatsApp(vars, booking.notes)
+
+        const delaySeconds = Math.floor(Math.random() * 3) + 1
         const nextRetryAt = new Date(Date.now() + delaySeconds * 1000)
+        const instanceName = booking.complex.whatsappConfig?.instanceName
 
-        // Idempotent upsert: prevent duplicate message records for the same booking
         prisma.whatsappOutboundMessage
           .upsert({
             where: { bookingId: booking.id },
@@ -154,18 +154,17 @@ export async function PATCH(
               lastError: phoneValidation.isValid ? null : phoneValidation.error,
               nextRetryAt,
             },
-            update: {},
+            update: {
+              messageBody: whatsappBody,
+              status: phoneValidation.isValid ? "PENDING" : "FAILED_PERMANENT",
+              nextRetryAt,
+            },
           })
           .then(async (outbound) => {
-            // Immediate dispatch if instance is actively CONNECTED
-            if (
-              phoneValidation.isValid &&
-              booking.complex.whatsappConfig?.status === "CONNECTED" &&
-              booking.complex.whatsappConfig.isActive
-            ) {
+            if (phoneValidation.isValid && instanceName) {
               try {
                 const sendRes = await EvolutionApiClient.sendTextMessage(
-                  booking.complex.whatsappConfig.instanceName,
+                  instanceName,
                   phoneValidation.formattedPhone,
                   whatsappBody
                 )

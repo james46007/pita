@@ -80,3 +80,55 @@ export function renderBookingConfirmationWhatsApp(
   const randomIndex = Math.floor(Math.random() * DEFAULT_TEMPLATES.length)
   return DEFAULT_TEMPLATES[randomIndex](variables)
 }
+
+/**
+ * Generates an outbound WhatsApp message for cancelled or rejected bookings.
+ */
+export function renderBookingCancellationWhatsApp(
+  variables: BookingTemplateVariables,
+  reason?: string | null
+): string {
+  const reasonText = reason ? `\n📌 *Detalle:* ${reason}\n` : ""
+  return (
+    `Hola ${variables.customerName}. Te informamos que tu reserva en *${variables.complexName}* ha sido *cancelada*.\n\n` +
+    `🏟️ *Cancha:* ${variables.courtName}\n` +
+    `📅 *Fecha:* ${variables.date}\n` +
+    `⏰ *Horario:* ${variables.startTime} - ${variables.endTime}\n` +
+    reasonText +
+    `\nEl horario ha sido liberado. Si ya realizaste el pago o deseas consultar otro horario, por favor comunícate de inmediato con recepción.`
+  )
+}
+
+/**
+ * Generates an outbound WhatsApp match reminder message.
+ */
+export function renderBookingReminderWhatsApp(
+  variables: BookingTemplateVariables,
+  hoursNotice: number = 2
+): string {
+  return (
+    `⚽ *Recordatorio de Partido - ${variables.complexName}*\n\n` +
+    `¡Hola ${variables.customerName}! 👋 Te recordamos que tu partido inicia en aproximadamente *${hoursNotice} horas*:\n\n` +
+    `🏟️ *Cancha:* ${variables.courtName}\n` +
+    `📅 *Fecha:* ${variables.date}\n` +
+    `⏰ *Horario:* ${variables.startTime} - ${variables.endTime}\n` +
+    `📍 *Dirección:* ${variables.complexAddress}\n\n` +
+    `¡Te esperamos en la cancha! 🏆`
+  )
+}
+
+/**
+ * Generates an outbound WhatsApp warning for bookings about to expire due to pending payment.
+ */
+export function renderPaymentExpiringWarningWhatsApp(
+  variables: BookingTemplateVariables,
+  remainingMinutes: number
+): string {
+  return (
+    `⏳ *Aviso de Pago - ${variables.complexName}*\n\n` +
+    `Hola ${variables.customerName}, tu reserva para *${variables.courtName}* (${variables.date} de ${variables.startTime} a ${variables.endTime}) vencerá en aproximadamente *${remainingMinutes} minutos*.\n\n` +
+    `💵 *Monto:* $${variables.totalAmount.toFixed(2)}\n\n` +
+    `Para asegurar tu turno y evitar que la cancha sea liberada automáticamente, por favor realiza la transferencia y envía la foto de tu comprobante por este chat.\n\n` +
+    `💳 Si necesitas ver los datos bancarios para transferir, responde con la palabra: *cuentas*`
+  )
+}

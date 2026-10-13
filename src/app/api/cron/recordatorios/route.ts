@@ -3,6 +3,9 @@ import { prisma } from "@/lib/prisma"
 import { assertCronAuthorized } from "@/lib/cron-auth"
 import { sendEmail } from "@/lib/email/resend"
 import { renderBookingReminderEmail } from "@/lib/email/templates/booking-reminder"
+import { renderBookingReminderWhatsApp, type BookingTemplateVariables } from "@/lib/whatsapp/templates"
+import { normalizePhoneToE164 } from "@/lib/whatsapp/phone"
+import { EvolutionApiClient } from "@/lib/whatsapp/evolution"
 
 export async function GET(req: Request) {
   if (!assertCronAuthorized(req)) {
@@ -11,24 +14,25 @@ export async function GET(req: Request) {
 
   try {
     const now = new Date()
+    const url = new URL(req.url)
+    const isForce = url.searchParams.get("force") === "true"
 
-    // 1-hour prior window: [now + 50 min, now + 75 min]
-    const windowStart = new Date(now.getTime() + 50 * 60 * 1000)
-    const windowEnd = new Date(now.getTime() + 75 * 60 * 1000)
+    // Default window: matches starting in ~2 hours [now + 60 min, now + 150 min]
+    const windowStart = new Date(now.getTime() + 60 * 60 * 1000)
+    const windowEnd = new Date(now.getTime() + 150 * 60 * 1000)
 
-    // Today boundaries in UTC/server
+    // Today and tomorrow boundaries in UTC
     const todayStart = new Date(now)
     todayStart.setHours(0, 0, 0, 0)
     const tomorrowEnd = new Date(now)
     tomorrowEnd.setDate(tomorrowEnd.getDate() + 1)
     tomorrowEnd.setHours(23, 59, 59, 999)
 
-    // Fetch confirmed bookings that have not received a reminder yet
+    // Fetch confirmed bookings that haven't received a reminder yet
     const candidates = await prisma.booking.findMany({
       where: {
         status: "CONFIRMED",
         reminderSentAt: null,
-        customerEmail: { not: null },
         slot: {
           date: {
             gte: todayStart,
@@ -39,62 +43,108 @@ export async function GET(req: Request) {
       include: {
         slot: true,
         court: true,
-        complex: true,
+        complex: {
+          include: {
+            whatsappConfig: true,
+          },
+        },
       },
     })
 
-    let remindersSent = 0
+    let remindersSentWhatsApp = 0
+    let remindersSentEmail = 0
     const errors: Array<{ bookingId: string; error: string }> = []
 
     for (const booking of candidates) {
-      if (!booking.customerEmail || !booking.slot?.startTime) continue
+      if (!booking.slot?.startTime) continue
 
       // Parse slot date and time
       const dateIso = new Date(booking.slot.date).toISOString().split("T")[0]
       const [hours, minutes] = booking.slot.startTime.split(":").map(Number)
       const slotDateTime = new Date(`${dateIso}T${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}:00`)
 
-      // Check if slot falls in the 1h-ahead window
-      // Or in test query parameter ?force=true
-      const url = new URL(req.url)
-      const isForce = url.searchParams.get("force") === "true"
-
+      // Check if slot falls in the upcoming reminder window (or force=true)
       if (isForce || (slotDateTime >= windowStart && slotDateTime <= windowEnd)) {
-        try {
-          const formattedDate = new Date(booking.slot.date).toLocaleDateString("es-ES", {
-            weekday: "long",
-            day: "numeric",
-            month: "long",
-          })
+        let sentAny = false
 
-          const html = renderBookingReminderEmail({
-            customerName: booking.customerName,
-            complexName: booking.complex.name,
-            complexAddress: booking.complex.address,
-            complexPhone: booking.complex.phone,
-            courtName: booking.court.name,
-            courtType: booking.court.type,
-            date: formattedDate,
-            startTime: booking.slot.startTime,
-            endTime: booking.slot.endTime,
-          })
+        const formattedDate = new Date(booking.slot.date).toLocaleDateString("es-ES", {
+          weekday: "long",
+          day: "numeric",
+          month: "long",
+        })
 
-          const sendResult = await sendEmail({
-            to: booking.customerEmail,
-            subject: `⏰ Recordatorio: Tu partido en ${booking.complex.name} empieza en 1 hora`,
-            html,
-          })
+        const templateVars: BookingTemplateVariables = {
+          customerName: booking.customerName,
+          complexName: booking.complex.name,
+          complexAddress: booking.complex.address || "Consultar con recepción",
+          courtName: booking.court.name,
+          date: formattedDate,
+          startTime: booking.slot.startTime,
+          endTime: booking.slot.endTime,
+          totalAmount: Number(booking.totalAmount),
+          bookingId: booking.id,
+        }
 
-          if (sendResult.success) {
-            await prisma.booking.update({
-              where: { id: booking.id },
-              data: { reminderSentAt: new Date() },
-            })
-            remindersSent++
+        // 1. Dispatch WhatsApp reminder
+        const instanceName = booking.complex.whatsappConfig?.instanceName
+        if (booking.customerPhone && instanceName) {
+          try {
+            const phoneValidation = normalizePhoneToE164(booking.customerPhone)
+            if (phoneValidation.isValid) {
+              const whatsappBody = renderBookingReminderWhatsApp(templateVars, 2)
+              const sendRes = await EvolutionApiClient.sendTextMessage(
+                instanceName,
+                phoneValidation.formattedPhone,
+                whatsappBody
+              )
+              if (sendRes.success) {
+                remindersSentWhatsApp++
+                sentAny = true
+              } else {
+                console.warn(`[CRON_RECORDATORIOS_WA_WARN] ${booking.id}:`, sendRes.error)
+              }
+            }
+          } catch (waErr: any) {
+            console.error(`[CRON_RECORDATORIOS_WA_ERROR] ${booking.id}:`, waErr)
           }
-        } catch (err: any) {
-          console.error(`[CRON_RECORDATORIOS] Error sending reminder for booking ${booking.id}:`, err)
-          errors.push({ bookingId: booking.id, error: err.message || "Unknown error" })
+        }
+
+        // 2. Dispatch Email reminder if customer provided email
+        if (booking.customerEmail) {
+          try {
+            const html = renderBookingReminderEmail({
+              customerName: booking.customerName,
+              complexName: booking.complex.name,
+              complexAddress: booking.complex.address,
+              complexPhone: booking.complex.phone,
+              courtName: booking.court.name,
+              courtType: booking.court.type,
+              date: formattedDate,
+              startTime: booking.slot.startTime,
+              endTime: booking.slot.endTime,
+            })
+
+            const emailResult = await sendEmail({
+              to: booking.customerEmail,
+              subject: `⏰ Recordatorio: Tu partido en ${booking.complex.name} empieza pronto`,
+              html,
+            })
+
+            if (emailResult.success) {
+              remindersSentEmail++
+              sentAny = true
+            }
+          } catch (emailErr: any) {
+            console.error(`[CRON_RECORDATORIOS_EMAIL_ERROR] ${booking.id}:`, emailErr)
+          }
+        }
+
+        // Mark as sent if either WhatsApp or Email succeeded
+        if (sentAny) {
+          await prisma.booking.update({
+            where: { id: booking.id },
+            data: { reminderSentAt: new Date() },
+          })
         }
       }
     }
@@ -103,7 +153,8 @@ export async function GET(req: Request) {
       success: true,
       timestamp: now.toISOString(),
       candidatesFound: candidates.length,
-      remindersSent,
+      remindersSentWhatsApp,
+      remindersSentEmail,
       errors,
     })
   } catch (error: any) {
