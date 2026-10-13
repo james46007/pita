@@ -59,6 +59,8 @@ export type MenuResolution =
   | { kind: "menu" }
   | { kind: "cuentas" }
   | { kind: "info" }
+  | { kind: "mis_reservas" }
+  | { kind: "agendar" }
   | { kind: "intent"; text: string }
   | { kind: "none" }
 
@@ -75,6 +77,8 @@ export function resolveMenuInput(text: string, listRowId?: string | null): MenuR
   }
 
   if (!rowId) return { kind: "none" }
+  if (rowId === "svc_agendar") return { kind: "agendar" }
+  if (rowId === "svc_mis_reservas") return { kind: "mis_reservas" }
   if (rowId === "svc_cuentas") return { kind: "cuentas" }
   if (rowId === "svc_info") return { kind: "info" }
   if (ROW_INTENT[rowId]) return { kind: "intent", text: ROW_INTENT[rowId] }

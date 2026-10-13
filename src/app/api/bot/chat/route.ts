@@ -5,6 +5,7 @@ import { assertBotAuthorized } from "@/lib/bot-auth"
 import { buildMenu, resolveMenuInput } from "@/lib/bot/menu"
 import { runAgent, type GeminiContent } from "@/lib/bot/llm"
 import { processCustomerReceipt } from "@/lib/bot/receipt"
+import { cleanupExpiredBookings } from "@/lib/booking-expiration"
 
 const HISTORY_LIMIT = 30
 const MEMORY_TTL_MS = 12 * 60 * 60 * 1000 // conversation context expires after 12h of inactivity
@@ -129,6 +130,70 @@ export async function POST(req: Request) {
       return NextResponse.json({ shouldReply: true, replyText: reply, interactive: null })
     }
 
+    if (menuInput.kind === "agendar") {
+      const tz = process.env.BOT_TIMEZONE || "America/Guayaquil"
+      const todayStr = new Date().toLocaleDateString("en-CA", { timeZone: tz }) // YYYY-MM-DD
+
+      const courts = await prisma.court.findMany({
+        where: { complexId: complex.id, isActive: true },
+        select: { id: true, name: true, pricePerHour: true },
+      })
+      await Promise.all(courts.map((c) => cleanupExpiredBookings(c.id)))
+
+      const slots = await prisma.slot.findMany({
+        where: {
+          court: { complexId: complex.id, isActive: true },
+          date: new Date(`${todayStr}T00:00:00Z`),
+          status: "AVAILABLE",
+        },
+        include: { court: { select: { name: true, pricePerHour: true } } },
+        orderBy: [{ startTime: "asc" }],
+        take: 12,
+      })
+
+      let reply = `📅 *Reserva de Canchas - ${complex.name}*\n\n`
+      if (slots.length === 0) {
+        reply += `No encontramos turnos disponibles registrados para hoy (${todayStr}).\n\n` +
+          `Para consultar otros días o agendar directamente, por favor comunícate a recepción al *${complex.phone}*.`
+      } else {
+        reply += `*Horarios disponibles para hoy (${todayStr}):*\n`
+        reply += slots.map((s) => `• ${s.court.name}: *${s.startTime} - ${s.endTime}* ($${Number(s.court.pricePerHour)}/h)`).join("\n")
+        reply += `\n\nPara apartar tu turno o consultar otras fechas, escríbenos qué día y hora deseas o comunícate a recepción al *${complex.phone}*.`
+      }
+
+      await save("USER", text || "[reservar cancha]", [{ text: text || "Reservar cancha" }])
+      await save("MODEL", reply, [{ text: reply }])
+      return NextResponse.json({ shouldReply: true, replyText: reply, interactive: null })
+    }
+
+    if (menuInput.kind === "mis_reservas") {
+      const bookings = await prisma.booking.findMany({
+        where: {
+          complexId: complex.id,
+          customerPhone: { contains: phone.slice(-8) },
+          status: { not: "CANCELLED" },
+        },
+        include: { slot: true, court: { select: { name: true } } },
+        orderBy: { createdAt: "desc" },
+        take: 5,
+      })
+
+      let reply = `📋 *Tus Reservas - ${complex.name}*\n\n`
+      if (bookings.length === 0) {
+        reply += `No encontramos reservas activas registradas con tu número (*${phone}*).\n\nPara agendar un turno, escribe *1* o comunícate a recepción al *${complex.phone}*.`
+      } else {
+        reply += bookings.map((b, i) => {
+          const statusText = b.status === "CONFIRMED" ? "✅ Confirmada" : b.status === "RECEIPT_UPLOADED" ? "📄 Comprobante Recibido" : "⏳ Pendiente de Pago"
+          const dateStr = b.slot.date.toISOString().slice(0, 10)
+          return `${i + 1}. *${b.court.name}*\n   📅 Fecha: ${dateStr}\n   ⏰ Horario: ${b.slot.startTime} - ${b.slot.endTime}\n   💵 Monto: $${Number(b.totalAmount)}\n   📌 Estado: ${statusText}`
+        }).join("\n\n")
+        reply += `\n\nSi necesitas modificar una reserva, comunícate a recepción al *${complex.phone}*.`
+      }
+      await save("USER", text || "[mis reservas]", [{ text: text || "Mis reservas" }])
+      await save("MODEL", reply, [{ text: reply }])
+      return NextResponse.json({ shouldReply: true, replyText: reply, interactive: null })
+    }
+
     if (isImage) {
       const receiptResult = await processCustomerReceipt({
         complexId: complex.id,
@@ -174,11 +239,22 @@ export async function POST(req: Request) {
       })
     } catch (err: any) {
       console.error("[BOT_CHAT_LLM_ERROR]", err)
+      const menu = buildMenu(complex.name, customerName)
+      const fallbackReply =
+        `👋 *¡Hola ${customerName || ""}! Bienvenido a ${complex.name}*\n\n` +
+        `En este momento te atendemos por nuestro menú de opciones directas:\n\n` +
+        `1️⃣ *Consultar disponibilidad y canchas*\n` +
+        `2️⃣ *Ver mis reservas activas*\n` +
+        `3️⃣ *Cuentas bancarias para transferir*\n` +
+        `4️⃣ *Ubicación y teléfono de recepción*\n\n` +
+        `👉 *Responde con el número de la opción (1, 2, 3 o 4) o presiona el botón Servicios.*`
+
+      await save("USER", userText, [{ text: userText }])
+      await save("MODEL", fallbackReply, [{ text: fallbackReply }])
       return NextResponse.json({
         shouldReply: true,
-        replyText: "Disculpa, tuvimos un inconveniente técnico temporal con nuestro servicio de reservas. Por favor intenta nuevamente o escribe *menu*.",
-        interactive: null,
-        errorDetail: err?.message || String(err),
+        replyText: fallbackReply,
+        interactive: menu.interactive,
       })
     }
 
