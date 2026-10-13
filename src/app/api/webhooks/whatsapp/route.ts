@@ -1,8 +1,9 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/prisma"
+import { assertBotAuthorized } from "@/lib/bot-auth"
 
 // POST /api/webhooks/whatsapp
-// Public webhook endpoint receiving Evolution API connection and status events
+// Webhook endpoint receiving Evolution API connection and status events (from n8n or Evolution API)
 export async function POST(req: Request) {
   try {
     const body = await req.json().catch(() => null)
@@ -23,6 +24,19 @@ export async function POST(req: Request) {
 
     if (!config) {
       return NextResponse.json({ received: true, matched: false })
+    }
+
+    // Seguridad: verificar autenticación de n8n (PITA_BOT_SECRET_KEY) o apikey de Evolution API
+    const isBotAuth = assertBotAuthorized(req)
+    const apiKeyHeader = req.headers.get("apikey")
+    const isGlobalKey = process.env.EVOLUTION_GLOBAL_KEY && apiKeyHeader === process.env.EVOLUTION_GLOBAL_KEY
+    const isInstanceKey = config.instanceApiKey && apiKeyHeader === config.instanceApiKey
+
+    if (!isBotAuth && !isGlobalKey && !isInstanceKey) {
+      if (process.env.NODE_ENV === "production" && (process.env.PITA_BOT_SECRET_KEY || process.env.EVOLUTION_GLOBAL_KEY)) {
+        console.warn(`[WHATSAPP_WEBHOOK_UNAUTHORIZED] Intento de webhook no autorizado para la instancia: ${instance}`)
+        return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+      }
     }
 
     // Handle connection lifecycle events

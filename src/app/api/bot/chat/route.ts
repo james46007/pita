@@ -5,7 +5,7 @@ import { assertBotAuthorized } from "@/lib/bot-auth"
 import { buildMenu, resolveMenuInput } from "@/lib/bot/menu"
 import { runAgent, type GeminiContent } from "@/lib/bot/llm"
 import { processCustomerReceipt } from "@/lib/bot/receipt"
-import { cleanupExpiredBookings } from "@/lib/booking-expiration"
+import { handleGuidedFlow } from "@/lib/bot/booking-flow"
 
 const HISTORY_LIMIT = 30
 const MEMORY_TTL_MS = 12 * 60 * 60 * 1000 // conversation context expires after 12h of inactivity
@@ -33,10 +33,6 @@ function trimHistory(history: GeminiContent[]): GeminiContent[] {
 
 export const maxDuration = 60
 
-// Deduplication cache for incoming message IDs (prevents double execution from webhook retries)
-const processedMessages = new Map<string, { timestamp: number }>()
-const DEDUP_TTL_MS = 45 * 1000 // 45 seconds
-
 // POST /api/bot/chat
 export async function POST(req: Request) {
   if (!assertBotAuthorized(req)) {
@@ -52,18 +48,24 @@ export async function POST(req: Request) {
   const phone = parsed.data.phone.replace(/\D/g, "")
   const customerName = (parsed.data.pushName || "Jugador").slice(0, 60)
 
-  // Deduplicación: si el mismo messageId llega duplicado en 45 segundos, silenciarlo
+  // Deduplicación persistente en BD (funciona entre múltiples instancias serverless de Vercel)
   if (messageId) {
-    const now = Date.now()
-    for (const [id, item] of processedMessages) {
-      if (now - item.timestamp > DEDUP_TTL_MS) processedMessages.delete(id)
+    try {
+      await prisma.botProcessedMessage.create({
+        data: { id: messageId },
+      })
+      // Limpieza oportunista en segundo plano de IDs de más de 2 horas
+      if (Math.random() < 0.05) {
+        prisma.botProcessedMessage.deleteMany({
+          where: { createdAt: { lt: new Date(Date.now() - 2 * 60 * 60 * 1000) } },
+        }).catch(() => {})
+      }
+    } catch (err: any) {
+      if (err?.code === "P2002") {
+        console.warn(`[BOT_DEDUP] Duplicate message detected in DB, silencing: ${messageId}`)
+        return NextResponse.json({ shouldReply: false, replyText: null, interactive: null })
+      }
     }
-
-    if (processedMessages.has(messageId)) {
-      console.warn(`[BOT_DEDUP] Duplicate message detected, silencing: ${messageId}`)
-      return NextResponse.json({ shouldReply: false, replyText: null, interactive: null })
-    }
-    processedMessages.set(messageId, { timestamp: now })
   }
 
   try {
@@ -107,6 +109,28 @@ export async function POST(req: Request) {
     // ---- Deterministic paths (no LLM cost) ----
     const menuInput = resolveMenuInput(text, listRowId)
 
+    // Guided booking flow (day -> slot -> confirm -> booking). Never calls the LLM.
+    if (!isImage) {
+      const lastModel = await prisma.botMessage.findFirst({
+        where: { conversationId: conversation.id, role: "MODEL", createdAt: { gte: new Date(Date.now() - MEMORY_TTL_MS) } },
+        orderBy: { createdAt: "desc" },
+        select: { content: true },
+      })
+      const flow = await handleGuidedFlow({
+        text,
+        listRowId: menuInput.kind === "agendar" ? "svc_agendar" : listRowId,
+        complex: { id: complex.id, name: complex.name, phone: complex.phone },
+        phone,
+        customerName,
+        lastModelText: lastModel?.content ?? null,
+      })
+      if (flow) {
+        await save("USER", text || "[seleccion de menu]", [{ text: text || "Selección de menú" }])
+        await save("MODEL", flow.replyText, [{ text: flow.replyText }])
+        return NextResponse.json({ shouldReply: true, replyText: flow.replyText, interactive: flow.interactive })
+      }
+    }
+
     if (menuInput.kind === "menu") {
       const menu = buildMenu(complex.name, customerName)
       await save("USER", text, [{ text }])
@@ -144,42 +168,6 @@ export async function POST(req: Request) {
         `📞 *Teléfono / Recepción:* ${complex.phone}\n\n` +
         `Si necesitas asistencia de nuestro personal o consultar por torneos/eventos, te atenderemos en ese número.`
       await save("USER", text || "[ubicacion y contacto]", [{ text: text || "Ubicación y contacto" }])
-      await save("MODEL", reply, [{ text: reply }])
-      return NextResponse.json({ shouldReply: true, replyText: reply, interactive: null })
-    }
-
-    if (menuInput.kind === "agendar") {
-      const tz = process.env.BOT_TIMEZONE || "America/Guayaquil"
-      const todayStr = new Date().toLocaleDateString("en-CA", { timeZone: tz }) // YYYY-MM-DD
-
-      const courts = await prisma.court.findMany({
-        where: { complexId: complex.id, isActive: true },
-        select: { id: true, name: true, pricePerHour: true },
-      })
-      await Promise.all(courts.map((c) => cleanupExpiredBookings(c.id)))
-
-      const slots = await prisma.slot.findMany({
-        where: {
-          court: { complexId: complex.id, isActive: true },
-          date: new Date(`${todayStr}T00:00:00Z`),
-          status: "AVAILABLE",
-        },
-        include: { court: { select: { name: true, pricePerHour: true } } },
-        orderBy: [{ startTime: "asc" }],
-        take: 12,
-      })
-
-      let reply = `📅 *Reserva de Canchas - ${complex.name}*\n\n`
-      if (slots.length === 0) {
-        reply += `No encontramos turnos disponibles registrados para hoy (${todayStr}).\n\n` +
-          `Para consultar otros días o agendar directamente, por favor comunícate a recepción al *${complex.phone}*.`
-      } else {
-        reply += `*Horarios disponibles para hoy (${todayStr}):*\n`
-        reply += slots.map((s) => `• ${s.court.name}: *${s.startTime} - ${s.endTime}* ($${Number(s.court.pricePerHour)}/h)`).join("\n")
-        reply += `\n\nPara apartar tu turno o consultar otras fechas, escríbenos qué día y hora deseas o comunícate a recepción al *${complex.phone}*.`
-      }
-
-      await save("USER", text || "[reservar cancha]", [{ text: text || "Reservar cancha" }])
       await save("MODEL", reply, [{ text: reply }])
       return NextResponse.json({ shouldReply: true, replyText: reply, interactive: null })
     }

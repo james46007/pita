@@ -270,3 +270,10 @@ model BotMessage {
 
   @@index([conversationId, createdAt])
 }
+
+model BotProcessedMessage {
+  id        String   @id // stores messageId uniquely
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
+}
