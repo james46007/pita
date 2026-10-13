@@ -34,7 +34,10 @@ Reglas:
 }
 
 const CANDIDATE_MODELS = [
+  "gemini-2.5-flash",
+  "gemini-2.5-flash-lite",
   "gemini-3.8-flash",
+  "gemini-3.5-flash",
 ]
 
 const MAX_RETRIES = 2
@@ -44,8 +47,8 @@ async function callGemini(contents: GeminiContent[], system: string): Promise<Ge
   if (!apiKey) throw new Error("GEMINI_API_KEY no configurada")
 
   const configured = process.env.GEMINI_MODEL
-  const isLegacy = configured && (configured.includes("1.5") || configured.includes("2.0") || configured.includes("2.5") || configured.includes("3.1") || configured.includes("3.5"))
-  const primaryModel = (!configured || isLegacy) ? "gemini-3.8-flash" : configured
+  const isLegacy = configured && (configured.includes("1.5") || configured.includes("2.0"))
+  const primaryModel = (!configured || isLegacy) ? "gemini-2.5-flash" : configured
   const modelsToTry = Array.from(
     new Set([
       primaryModel,
@@ -80,7 +83,12 @@ async function callGemini(contents: GeminiContent[], system: string): Promise<Ge
           const errText = await res.text()
           console.warn(`[GEMINI_${model}_WARN] Attempt ${attempt + 1} - ${res.status}: ${errText.slice(0, 150)}`)
           lastError = new Error(`Gemini (${model}) ${res.status}: ${errText.slice(0, 200)}`)
-          if (res.status === 503 || res.status === 429) {
+
+          // Si es cuota/billing agotada en este modelo, no insistir; pasar directo al siguiente modelo
+          if (res.status === 429 && (errText.includes("quota") || errText.includes("billing"))) {
+            break
+          }
+          if (res.status === 503) {
             continue // Reintentar con breve espera si hay sobrecarga temporal
           }
           break // No reintentar en errores 400 u otros errores fatales

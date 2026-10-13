@@ -209,7 +209,7 @@ export async function GET(req: Request) {
   const testGemini = searchParams.get("test") === "true"
   const apiKey = process.env.GEMINI_API_KEY
   const envModel = process.env.GEMINI_MODEL
-  const model = (!envModel || envModel.includes("2.5") || envModel.includes("1.5")) ? "gemini-3.8-flash" : envModel
+  const model = (!envModel || envModel.includes("2.0") || envModel.includes("1.5")) ? "gemini-2.5-flash" : envModel
 
   const status = {
     status: "ok",
@@ -232,7 +232,8 @@ export async function GET(req: Request) {
   }
 
   if (testGemini && apiKey) {
-    const candidates = ["gemini-1.5-flash", "gemini-2.0-flash", "gemini-1.5-pro"]
+    const specificModel = searchParams.get("model")
+    const candidates = specificModel ? [specificModel] : ["gemini-2.5-flash", "gemini-2.5-flash-lite", "gemini-3.8-flash", "gemini-3.5-flash"]
     const candidateErrors: Record<string, any> = {}
     for (const m of candidates) {
       try {
