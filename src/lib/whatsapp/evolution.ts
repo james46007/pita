@@ -80,6 +80,18 @@ export class EvolutionApiClient {
         }),
       }).catch(() => {})
 
+      // Enforce settings: ignore groups and disable auto-marking messages as read
+      fetch(`${baseUrl}/settings/set/${instanceName}`, {
+        method: "POST",
+        headers: this.getHeaders(),
+        body: JSON.stringify({
+          groupsIgnore: true,
+          readMessages: false,
+          readStatus: false,
+          rejectCall: false,
+        }),
+      }).catch(() => {})
+
       if (response.ok || response.status === 403 || response.status === 409) {
         // Instance created or already exists
         return { success: true }
@@ -248,6 +260,34 @@ export class EvolutionApiClient {
       clearTimeout(timeoutId)
     } catch {
       // Ignored by design
+    }
+  }
+
+  /**
+   * Configures instance settings to ignore WhatsApp groups and disable automatic message read receipts.
+   */
+  public static async configureSettings(instanceName: string): Promise<{ success: boolean; error?: string }> {
+    const { baseUrl } = getApiConfig()
+    try {
+      const response = await fetch(`${baseUrl}/settings/set/${instanceName}`, {
+        method: "POST",
+        headers: this.getHeaders(),
+        body: JSON.stringify({
+          groupsIgnore: true,
+          readMessages: false,
+          readStatus: false,
+          rejectCall: false,
+        }),
+      })
+
+      if (!response.ok) {
+        const errText = await response.text()
+        return { success: false, error: errText || `Status ${response.status}` }
+      }
+
+      return { success: true }
+    } catch (err: any) {
+      return { success: false, error: err.message || "Failed to configure settings" }
     }
   }
 }

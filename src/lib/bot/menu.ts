@@ -62,7 +62,7 @@ export type MenuResolution =
   | { kind: "intent"; text: string }
   | { kind: "none" }
 
-const MENU_EXPLICIT_RE = /^(menu|menú|inicio|opciones|servicios)\W*$/i
+const MENU_EXPLICIT_RE = /^(menu|menú|inicio|opciones|servicios|hola|buenas|buenos dias|buenos días|buenas tardes|buenas noches|saludos|ayuda|empezar|comenzar|hola buenas|alo|hey)\W*$/i
 
 export function resolveMenuInput(text: string, listRowId?: string | null): MenuResolution {
   let rowId = listRowId || ""

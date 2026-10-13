@@ -23,12 +23,15 @@ export async function GET(req: Request) {
           where: { complexId },
           data: { status: "CONNECTED" },
         })
+        EvolutionApiClient.configureSettings(config.instanceName).catch(() => {})
       } else if (stateResult.state === "close") {
         config = await prisma.complexWhatsappConfig.update({
           where: { complexId },
           data: { status: "DISCONNECTED" },
         })
       }
+    } else if (config && config.status === "CONNECTED") {
+      EvolutionApiClient.configureSettings(config.instanceName).catch(() => {})
     }
 
     // Outbound metrics
