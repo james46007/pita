@@ -49,14 +49,14 @@ export async function POST(req: Request) {
   const customerName = (parsed.data.pushName || "Jugador").slice(0, 60)
 
   // Deduplicación persistente en BD (funciona entre múltiples instancias serverless de Vercel)
-  if (messageId) {
+  if (messageId && (prisma as any).botProcessedMessage) {
     try {
-      await prisma.botProcessedMessage.create({
+      await (prisma as any).botProcessedMessage.create({
         data: { id: messageId },
       })
       // Limpieza oportunista en segundo plano de IDs de más de 2 horas
       if (Math.random() < 0.05) {
-        prisma.botProcessedMessage.deleteMany({
+        ;(prisma as any).botProcessedMessage.deleteMany({
           where: { createdAt: { lt: new Date(Date.now() - 2 * 60 * 60 * 1000) } },
         }).catch(() => {})
       }
